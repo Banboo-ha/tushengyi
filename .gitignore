@@ -1,0 +1,10 @@
+.venv/
+__pycache__/
+*.pyc
+.DS_Store
+data/*.db
+uploads/*
+!uploads/.gitkeep
+.env
+*.env
+PRD/APIkey.md

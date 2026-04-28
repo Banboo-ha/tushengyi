@@ -1,0 +1,17 @@
+[Unit]
+Description=Haibao Kuaisheng Poster Worker
+After=network.target haibaokuaisheng-web.service
+
+[Service]
+Type=simple
+User=haibao
+Group=haibao
+WorkingDirectory=/opt/haibaokuaisheng
+EnvironmentFile=/etc/haibaokuaisheng/haibaokuaisheng.env
+ExecStart=/opt/haibaokuaisheng/.venv/bin/python scripts/worker.py
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target
+
