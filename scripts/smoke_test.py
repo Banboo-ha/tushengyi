@@ -45,6 +45,11 @@ def main():
         "image_response_format",
         "image_quality",
         "image_file_field",
+        "image_generation_action",
+        "prompt_template_product",
+        "prompt_template_xiaohongshu",
+        "prompt_template_main_image",
+        "prompt_template_promotion",
         "signup_points",
         "generate_cost",
         "modify_cost",
@@ -79,10 +84,13 @@ def main():
                     "subtitle": "山美水美鱼更美",
                     "selling_points": "现打现捞，鲜活直达",
                     "style": "premium_commercial",
+                    "poster_type": "product",
                     "ratio": "3:4",
+                    "image_quality": "medium",
                 },
             )
         )
+        assert task["points_cost"] == 8
         process_task(task["task_id"])
         task = assert_ok(client.get(f"/api/h5/poster/task/{task['task_id']}", headers=auth_headers(token)))
         assert task["status"] == "success"

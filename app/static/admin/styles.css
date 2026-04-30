@@ -22,6 +22,7 @@ body {
 
 button,
 input,
+textarea,
 select {
   font: inherit;
 }
@@ -45,13 +46,30 @@ button.danger {
   background: var(--danger);
 }
 
+.action-row {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.action-row button {
+  width: auto;
+}
+
 input,
+textarea,
 select {
   width: 100%;
   border: 1px solid var(--line);
   border-radius: 8px;
   padding: 11px 12px;
   outline: none;
+}
+
+textarea {
+  min-height: 180px;
+  resize: vertical;
+  line-height: 1.55;
 }
 
 .login {

@@ -13,7 +13,14 @@ from app.db import SessionLocal
 from app.models import PosterTask, PosterVersion, PosterWork, UploadedImage, User
 from app.services.ai_client import AIImageClient
 from app.services.points import consume_points, refund_points
-from app.services.settings import get_int_setting, get_setting
+from app.services.settings import (
+    PROMPT_TEMPLATE_MAIN_IMAGE,
+    PROMPT_TEMPLATE_PRODUCT,
+    PROMPT_TEMPLATE_PROMOTION,
+    PROMPT_TEMPLATE_XIAOHONGSHU,
+    get_int_setting,
+    get_setting,
+)
 
 
 STYLE_LABELS = {
@@ -21,6 +28,40 @@ STYLE_LABELS = {
     "xiaohongshu": "小红书种草风",
     "ecommerce": "电商主图风",
     "minimal": "极简高级风",
+}
+
+POSTER_TYPE_LABELS = {
+    "product": "产品广告海报",
+    "xiaohongshu": "小红书种草图",
+    "main_image": "电商主图",
+    "promotion": "活动促销海报",
+}
+
+PROMPT_TEMPLATE_DEFAULTS = {
+    "product": PROMPT_TEMPLATE_PRODUCT,
+    "xiaohongshu": PROMPT_TEMPLATE_XIAOHONGSHU,
+    "main_image": PROMPT_TEMPLATE_MAIN_IMAGE,
+    "promotion": PROMPT_TEMPLATE_PROMOTION,
+}
+
+REFERENCE_TYPE_LABELS = {
+    "background": "背景图",
+    "logo": "Logo参考图",
+    "style": "品牌风格参考图",
+    "layout": "排版模板参考图",
+    "color": "色彩参考图",
+    "other": "参考图",
+    "": "参考图",
+}
+
+QUALITY_COSTS = {
+    "medium": 8,
+    "high": 10,
+}
+
+QUALITY_LABELS = {
+    "medium": "高清",
+    "high": "超清",
 }
 
 logger = logging.getLogger(__name__)
@@ -52,18 +93,51 @@ def validate_images(db: Session, user_id: str, ids: list[str], image_type: str, 
     return [found[image_id] for image_id in ids]
 
 
-def build_generate_prompt(task: PosterTask, product_images: list[UploadedImage], reference_images: list[UploadedImage]) -> str:
-    refs = "、".join(filter(None, [image.reference_type or "其他参考" for image in reference_images])) or "无"
-    return f"""请根据用户上传的产品图生成一张商业宣传海报。
-产品主体需要清晰、真实、突出，参考上传产品图的外观、材质、包装和颜色。
-产品图数量：{len(product_images)} 张。参考图类型：{refs}。
-如果用户上传了背景、Logo、品牌风格或模板参考图，请在画面氛围、排版方向、色彩风格上参考，但不要破坏产品主体识别。
-海报主标题为：{task.title}
-副标题为：{task.subtitle or "无"}
-卖点文案为：{task.selling_points or "无"}
-整体风格为：{STYLE_LABELS.get(task.style, task.style)}
-画幅比例为：{task.ratio}
-画面需要具备移动端宣传海报质感，构图清晰，文案层级明确，避免杂乱，避免低质量拼贴感。"""
+def reference_material_lines(product_images: list[UploadedImage], reference_images: list[UploadedImage]) -> tuple[str, str]:
+    product_line = f"参考素材：提供产品图 {len(product_images)} 张，请将其作为关键视觉参考。" if product_images else "参考素材：未提供产品图。"
+    if not reference_images:
+        return product_line, "参考素材：未提供其他参考图。"
+
+    grouped: dict[str, int] = {}
+    for image in reference_images:
+        label = REFERENCE_TYPE_LABELS.get(image.reference_type or "other", "参考图")
+        grouped[label] = grouped.get(label, 0) + 1
+    lines = [
+        f"参考素材：提供{label} {count} 张，请将其作为关键视觉参考。"
+        for label, count in grouped.items()
+    ]
+    return product_line, "\n".join(lines)
+
+
+def render_prompt_template(template: str, values: dict[str, str]) -> str:
+    text = template
+    for key, value in values.items():
+        text = text.replace("{{" + key + "}}", value or "无")
+    return text.strip()
+
+
+def build_generate_prompt(db: Session, task: PosterTask, product_images: list[UploadedImage], reference_images: list[UploadedImage]) -> str:
+    poster_type = task.poster_type if task.poster_type in POSTER_TYPE_LABELS else "product"
+    template = get_setting(
+        db,
+        f"prompt_template_{poster_type}",
+        PROMPT_TEMPLATE_DEFAULTS[poster_type],
+    ).strip() or PROMPT_TEMPLATE_DEFAULTS[poster_type]
+    product_reference, reference_materials = reference_material_lines(product_images, reference_images)
+    return render_prompt_template(template, {
+        "poster_type": poster_type,
+        "poster_type_label": POSTER_TYPE_LABELS.get(poster_type, "产品广告海报"),
+        "title": task.title,
+        "subtitle": task.subtitle or "无",
+        "selling_points": task.selling_points or "无",
+        "product_count": str(len(product_images)),
+        "reference_count": str(len(reference_images)),
+        "product_reference": product_reference,
+        "reference_materials": reference_materials,
+        "style_label": STYLE_LABELS.get(task.style, task.style or "无"),
+        "ratio": task.ratio,
+        "quality_label": QUALITY_LABELS.get(task.image_quality, task.image_quality or "高清"),
+    })
 
 
 def build_modify_prompt(task: PosterTask) -> str:
@@ -117,19 +191,25 @@ def create_generate_task(
     subtitle: str,
     selling_points: str,
     style: str,
+    poster_type: str,
     ratio: str,
+    image_quality: str = "medium",
 ) -> PosterTask:
     title = title.strip()
     if not title:
         raise HTTPException(status_code=400, detail="请填写主标题")
     if style not in STYLE_LABELS:
         raise HTTPException(status_code=400, detail="请选择海报风格")
+    if poster_type not in POSTER_TYPE_LABELS:
+        raise HTTPException(status_code=400, detail="请选择生成类型")
     if ratio not in {"1:1", "3:4", "4:5", "9:16", "16:9"}:
         raise HTTPException(status_code=400, detail="画幅比例不支持")
+    if image_quality not in QUALITY_COSTS:
+        raise HTTPException(status_code=400, detail="图片质量不支持")
 
     product_images = validate_images(db, user.id, product_image_ids, "product", 1, 4)
     reference_images = validate_images(db, user.id, reference_image_ids, "reference", 0, 4)
-    cost = get_int_setting(db, "generate_cost", 10)
+    cost = QUALITY_COSTS[image_quality]
 
     task = PosterTask(
         user_id=user.id,
@@ -141,10 +221,12 @@ def create_generate_task(
         subtitle=subtitle.strip(),
         selling_points=selling_points.strip(),
         style=style,
+        poster_type=poster_type,
         ratio=ratio,
+        image_quality=image_quality,
         points_cost=cost,
     )
-    task.prompt = build_generate_prompt(task, product_images, reference_images)
+    task.prompt = build_generate_prompt(db, task, product_images, reference_images)
     db.add(task)
     db.flush()
     consume_points(db, user, cost, "生成消耗", task.id)
@@ -171,7 +253,9 @@ def create_modify_task(db: Session, user: User, work_id: str, version_id: str, e
         reference_image_ids=source_task.reference_image_ids if source_task else "[]",
         title=work.title,
         style=source_task.style if source_task else "",
+        poster_type=source_task.poster_type if source_task else "product",
         ratio=source_task.ratio if source_task else "3:4",
+        image_quality=source_task.image_quality if source_task else "medium",
         edit_instruction=edit_instruction,
         points_cost=cost,
         work_id=work.id,
@@ -203,15 +287,16 @@ def process_task(task_id: str, allow_running: bool = False) -> bool:
 
         mock_mode = get_setting(db, "mock_mode", "true").lower() in {"1", "true", "yes", "on"}
         client = AIImageClient(
-            base_url=get_setting(db, "image_base_url") or get_setting(db, "model_base_url"),
-            api_key=get_setting(db, "image_api_key") or get_setting(db, "model_api_key"),
-            model=get_setting(db, "image_model_name") or get_setting(db, "model_name", "gpt-image-1"),
+            base_url=get_setting(db, "model_base_url") or get_setting(db, "image_base_url"),
+            api_key=get_setting(db, "model_api_key") or get_setting(db, "image_api_key"),
+            model=get_setting(db, "model_name", "gpt-5.5"),
             mock_mode=mock_mode,
-            api_type=get_setting(db, "image_api_type", "images_generations"),
+            api_type="responses",
             size_mode=get_setting(db, "image_size_mode", "ratio_standard"),
             response_format=get_setting(db, "image_response_format", ""),
-            quality=get_setting(db, "image_quality", "auto"),
+            quality=task.image_quality or get_setting(db, "image_quality", "auto"),
             file_field=get_setting(db, "image_file_field", "image"),
+            generation_action=get_setting(db, "image_generation_action", ""),
         )
         image_paths = task_input_image_paths(db, task)
         image_url = client.generate_image(task.prompt, task.ratio, title=task.title or "AI 海报", image_paths=image_paths)

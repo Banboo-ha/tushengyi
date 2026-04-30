@@ -7,6 +7,7 @@ const toastEl = document.querySelector("#toast");
 let draft = JSON.parse(localStorage.getItem(stateKey) || "{}");
 let route = location.hash.replace("#", "") || "home";
 let lastTask = null;
+let waitingProgressTimer = null;
 
 const styles = [
   ["premium_commercial", "高级商业广告", "产品广告、品牌宣传"],
@@ -20,6 +21,19 @@ const posterTypes = [
   ["xiaohongshu", "小红书种草图", "适合民宿、美妆、生活方式内容", "type-xhs", "icon_02_heart.png", "type-xiaohongshu.png"],
   ["main_image", "电商主图", "适合商品销售和平台展示", "type-shop", "icon_03_cart.png", "type-ecommerce-main.png"],
   ["promotion", "活动促销海报", "适合门店活动、节日促销", "type-promo", "icon_04_megaphone.png", "type-promotion.png"],
+];
+
+const posterTypeStyleMap = {
+  product: "premium_commercial",
+  xiaohongshu: "xiaohongshu",
+  main_image: "ecommerce",
+  promotion: "premium_commercial",
+};
+
+const ratios = ["1:1", "3:4", "4:5", "9:16", "16:9"];
+const qualityOptions = [
+  ["medium", "高清", 8],
+  ["high", "超清", 10],
 ];
 
 const homeFeatures = [
@@ -40,19 +54,26 @@ function token() { return localStorage.getItem(tokenKey); }
 function saveDraft() { localStorage.setItem(stateKey, JSON.stringify(draft)); }
 function go(name) { route = name; location.hash = name; render(); }
 function toast(message) {
-  toastEl.textContent = message;
+  toastEl.textContent = formatErrorMessage(message).split("\n")[0];
   toastEl.classList.add("show");
   setTimeout(() => toastEl.classList.remove("show"), 2400);
 }
 function asset(url) { return url || ""; }
 function authHeaders() { return token() ? { Authorization: `Bearer ${token()}` } : {}; }
+function formatErrorMessage(detail) {
+  if (!detail) return "请求失败";
+  if (typeof detail === "string") return detail;
+  if (detail.message) return detail.message;
+  if (Array.isArray(detail)) return detail.map(item => item.msg || JSON.stringify(item)).join("\n");
+  return JSON.stringify(detail, null, 2);
+}
 
 async function request(path, options = {}) {
   const headers = { ...(options.headers || {}), ...authHeaders() };
   if (options.body && !(options.body instanceof FormData)) headers["Content-Type"] = "application/json";
   const res = await fetch(api + path, { ...options, headers });
   const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(data.detail || "请求失败");
+  if (!res.ok) throw new Error(formatErrorMessage(data.detail || data || "请求失败"));
   return data;
 }
 
@@ -66,19 +87,19 @@ function topbar(title, right = "") {
 }
 
 function historyBack() {
-  const map = { type: "home", product: "type", reference: "product", copy: "reference", style: "copy", confirm: "style", result: "home", edit: "result" };
+  const map = { type: "home", product: "type", reference: "product", copy: "reference", confirm: "copy", result: "home", edit: "result" };
   go(map[route] || "home");
 }
 
 function progress(step, label) {
   return `<div class="step-head">
-    <div class="step-count">${step}/5 ${label}</div>
-    <div class="step-bars">${[1,2,3,4,5].map(i => `<span class="${i <= step ? "active" : ""}"></span>`).join("")}</div>
+    <div class="step-count">${step}/4 ${label}</div>
+    <div class="step-bars">${[1,2,3,4].map(i => `<span class="${i <= step ? "active" : ""}"></span>`).join("")}</div>
   </div>`;
 }
 
 function bottomNav() {
-  const createActive = ["type","product","reference","copy","style","confirm","waiting","result","edit"].includes(route);
+  const createActive = ["type","product","reference","copy","confirm","waiting","result","edit"].includes(route);
   return `<nav class="nav">
     <button class="${route === "home" ? "active" : ""}" onclick="go('home')"><img class="nav-img" src="/h5-static/assets/ui_v1/common/${route === "home" ? "nav-home-active.svg" : "nav-home.svg"}" alt=""><span>首页</span></button>
     <button class="${createActive ? "active" : ""}" onclick="startFlow()"><img class="nav-img" src="/h5-static/assets/ui_v1/common/${createActive ? "nav-create-active.svg" : "nav-create.svg"}" alt=""><span>生成</span></button>
@@ -98,7 +119,7 @@ function needLogin(next) {
 
 function startFlow() {
   needLogin(() => {
-    draft = { productImages: [], referenceImages: [], ratio: "3:4", style: "premium_commercial", posterType: "product" };
+    draft = { productImages: [], referenceImages: [], ratio: "9:16", imageQuality: "high", style: "premium_commercial", posterType: "product" };
     saveDraft();
     go("type");
   });
@@ -110,7 +131,7 @@ async function render() {
   if (route === "product") return renderProduct();
   if (route === "reference") return renderReference();
   if (route === "copy") return renderCopy();
-  if (route === "style") return renderStyle();
+  if (route === "style") return go("confirm");
   if (route === "confirm") return renderConfirm();
   if (route === "waiting") return renderWaiting();
   if (route === "result") return renderResult();
@@ -154,7 +175,7 @@ async function renderHome() {
 
 function pickPosterTypeFromHome(type) {
   needLogin(() => {
-    draft = { productImages: [], referenceImages: [], ratio: "3:4", style: "premium_commercial", posterType: type };
+    draft = { productImages: [], referenceImages: [], ratio: "9:16", imageQuality: "high", style: posterTypeStyleMap[type] || "premium_commercial", posterType: type };
     saveDraft();
     go("product");
   });
@@ -162,7 +183,7 @@ function pickPosterTypeFromHome(type) {
 
 function pickStyleFromHome(style) {
   needLogin(() => {
-    draft = { productImages: [], referenceImages: [], ratio: "3:4", style, posterType: "product" };
+    draft = { productImages: [], referenceImages: [], ratio: "9:16", imageQuality: "high", style, posterType: "product" };
     saveDraft();
     go("type");
   });
@@ -220,7 +241,6 @@ function renderType() {
         <span class="type-arrow">›</span>
       </button>`).join("")}
     </section>
-    <p class="type-tip">后续可在生成页修改比例与风格</p>
   </section>`, false);
 }
 
@@ -232,6 +252,7 @@ function pickPosterType(type) {
 
 function pickPosterTypeAndNext(type) {
   draft.posterType = type;
+  draft.style = posterTypeStyleMap[type] || "premium_commercial";
   saveDraft();
   go("product");
 }
@@ -239,7 +260,6 @@ function pickPosterTypeAndNext(type) {
 function renderProduct() {
   ensureAuthRoute();
   layout(`${topbar("上传产品图")}${progress(1, "上传产品图")}
-    <div class="page-title"><h1>上传你的产品图</h1><p class="muted">产品图必填 1-4 张，建议包含主图、细节图、包装图。</p></div>
     ${uploadGrid("productImages", "product")}
     <section class="tips-card card">
       <b>上传建议</b>
@@ -253,7 +273,6 @@ function renderReference() {
   ensureAuthRoute();
   layout(`${topbar("上传参考图")}${progress(2, "上传参考图")}
     <div class="page-title"><h1>添加参考素材</h1><p class="muted">背景、Logo、模板或品牌风格都可以，可跳过。</p></div>
-    <div class="field"><label>参考类型</label><select id="refType"><option value="background">背景参考</option><option value="logo">Logo 参考</option><option value="style">品牌风格</option><option value="layout">排版模板</option><option value="color">色彩参考</option><option value="other">其他</option></select></div>
     ${uploadGrid("referenceImages", "reference")}
     <div class="actions bottom-pair"><button class="ghost" onclick="go('copy')">跳过</button><button class="primary" onclick="go('copy')">下一步</button></div>`);
 }
@@ -301,7 +320,6 @@ function nextProduct() {
 function renderCopy() {
   ensureAuthRoute();
   layout(`${topbar("填写文案")}${progress(3, "填写文案")}
-    <div class="page-title"><h1>告诉 AI 你想宣传什么</h1><p class="muted">主标题必填，文案越清楚，画面越稳定。</p></div>
     <section class="form-card card">
       <div class="field"><label>主标题 <em>*</em></label><input id="title" maxlength="30" value="${draft.title || ""}" placeholder="例如：好水出好鱼"><small>0/30</small></div>
       <div class="field"><label>副标题</label><input id="subtitle" maxlength="40" value="${draft.subtitle || ""}" placeholder="例如：来自密云水库的鲜活鱼"><small>0/40</small></div>
@@ -316,7 +334,7 @@ function saveCopy() {
   draft.subtitle = subtitle.value.trim();
   draft.selling_points = selling.value.trim();
   saveDraft();
-  go("style");
+  go("confirm");
 }
 
 function renderStyle() {
@@ -332,29 +350,48 @@ function renderStyle() {
 
 function pickStyle(style) { draft.style = style; saveDraft(); render(); }
 function pickRatio(ratio) { draft.ratio = ratio; saveDraft(); render(); }
+function pickQuality(quality) { draft.imageQuality = quality; saveDraft(); render(); }
+function updateRatio(value) { draft.ratio = value; saveDraft(); }
+function updateQuality(value) { draft.imageQuality = value; saveDraft(); render(); }
+
+function imageThumbStrip(images, emptyText) {
+  const list = images || [];
+  if (!list.length) return `<div class="confirm-empty">${emptyText}</div>`;
+  return `<div class="confirm-thumbs">${list.map(item => `<img src="${asset(item.image_url)}" alt="">`).join("")}</div>`;
+}
+
+function confirmImageGrid() {
+  const images = [...(draft.productImages || []), ...(draft.referenceImages || [])];
+  return imageThumbStrip(images, "未上传图片");
+}
 
 function renderConfirm() {
   ensureAuthRoute();
   const style = styles.find(s => s[0] === draft.style)?.[1] || "高级商业广告";
-  layout(`${topbar("确认生成")}${progress(5, "确认生成")}
-    <div class="page-title"><h1>确认生成内容</h1><p class="muted">确认无误后开始消耗积分生成。</p></div>
-    <section class="preview-row">
-      <div class="mini-preview card"><b>产品图</b><span>${(draft.productImages || []).length} 张</span></div>
-      <div class="mini-preview card"><b>参考图</b><span>${(draft.referenceImages || []).length} 张</span></div>
-    </section>
+  const ratio = draft.ratio || "9:16";
+  const quality = draft.imageQuality || "high";
+  const qualityMeta = qualityOptions.find(item => item[0] === quality) || qualityOptions[0];
+  const taskError = draft.lastTaskError;
+  layout(`${topbar("确认生成")}${progress(4, "确认生成")}
+    ${taskError ? `<section class="task-error card"><b>生成失败</b><p>${escapeHtml(taskError.message || "生成失败，请稍后重试")}</p><button onclick="clearTaskError()">我知道了</button></section>` : ""}
+    <section class="confirm-images card">${confirmImageGrid()}</section>
     <section class="panel card summary-list">
       <div><span>生成类型</span><b>${posterTypes.find(t => t[0] === draft.posterType)?.[1] || "产品宣传海报"}</b></div>
-      <div><span>主标题</span><b>${draft.title || "-"}</b></div>
       <div><span>风格</span><b>${style}</b></div>
-      <div><span>比例</span><b>${draft.ratio || "3:4"}</b></div>
+      <div><span>主标题</span><b>${draft.title || "-"}</b></div>
+      <div><span>副标题</span><b>${draft.subtitle || "-"}</b></div>
+      <div><span>卖点文案</span><b>${draft.selling_points || "-"}</b></div>
     </section>
-    <section class="ai-note card"><span>AI</span><p>将基于你的产品图、参考图和文案生成海报，生成成功后会自动保存到作品库。</p></section>
-    <section class="points-card"><span>预计消耗</span><b>10 积分</b></section>
-    <button class="primary bottom-action" onclick="createTask()">确认生成</button>`);
+    <section class="confirm-options card">
+      <label><span>比例</span><select onchange="updateRatio(this.value)">${ratios.map(r => `<option value="${r}" ${ratio === r ? "selected" : ""}>${r}</option>`).join("")}</select></label>
+      <label><span>质量</span><select onchange="updateQuality(this.value)">${qualityOptions.map(q => `<option value="${q[0]}" ${quality === q[0] ? "selected" : ""}>${q[1]}</option>`).join("")}</select></label>
+    </section>
+    <section class="confirm-submit-row"><div class="confirm-cost"><span>★</span><b>${qualityMeta[2]}</b><em>积分</em></div><button class="primary" onclick="createTask()">确认生成</button></section>`);
 }
 
 async function createTask() {
   try {
+    draft.lastTaskError = null;
     const data = await request("/poster/generate", {
       method: "POST",
       body: JSON.stringify({
@@ -364,7 +401,9 @@ async function createTask() {
         subtitle: draft.subtitle || "",
         selling_points: draft.selling_points || "",
         style: draft.style || "premium_commercial",
-        ratio: draft.ratio || "3:4",
+        poster_type: draft.posterType || "product",
+        ratio: draft.ratio || "9:16",
+        image_quality: draft.imageQuality || "high",
       }),
     });
     lastTask = data.task_id;
@@ -377,18 +416,52 @@ async function createTask() {
 function renderWaiting() {
   ensureAuthRoute();
   layout(`<section class="waiting">
-    <div class="waiting-orbit"><span></span><span></span><span></span><div>AI</div></div>
+    <div class="waiting-logo-progress" id="waitProgress">
+      <div class="waiting-logo-core"><img src="/h5-static/assets/ui_v1/brand/logo.png" alt="图生意"></div>
+    </div>
+    <p class="waiting-progress-label"><span id="waitPercent">0%</span></p>
     <h1>正在生成海报</h1>
     <p class="muted" id="waitText">正在分析产品图</p>
     <p class="muted">可以关闭页面或切到后台，生成成功后会自动出现在作品库。</p>
     <button class="secondary soft-secondary" onclick="go('works')">先去作品库</button>
   </section>`, false);
+  startWaitingProgress();
   pollTask(draft.lastTask);
 }
 
+function clearWaitingProgress() {
+  if (waitingProgressTimer) clearInterval(waitingProgressTimer);
+  waitingProgressTimer = null;
+}
+
+function startWaitingProgress() {
+  clearWaitingProgress();
+  const startedAt = Date.now();
+  const expectedMs = 80 * 1000;
+  const tick = () => {
+    const progress = document.querySelector("#waitProgress");
+    if (!progress || route !== "waiting") return clearWaitingProgress();
+    const ratio = Math.min((Date.now() - startedAt) / expectedMs, 0.98);
+    const percent = Math.round(ratio * 100);
+    progress.style.setProperty("--progress", `${ratio * 360}deg`);
+    const label = document.querySelector("#waitPercent");
+    if (label) label.textContent = `${percent}%`;
+  };
+  tick();
+  waitingProgressTimer = setInterval(tick, 500);
+}
+
 async function pollTask(taskId) {
+  if (!taskId) {
+    draft.lastTaskError = { message: "没有找到生成任务，请重新提交。" };
+    saveDraft();
+    toast("没有找到生成任务");
+    return go("confirm");
+  }
   const words = ["正在分析产品图", "正在理解宣传文案", "正在匹配海报风格", "正在生成海报", "正在优化画面细节"];
   let i = 0;
+  const startedAt = Date.now();
+  const maxWaitMs = 180 * 1000;
   const textTimer = setInterval(() => {
     const el = document.querySelector("#waitText");
     if (el) el.textContent = words[++i % words.length];
@@ -398,16 +471,41 @@ async function pollTask(taskId) {
       const task = await request(`/poster/task/${taskId}`);
       if (task.status === "success") {
         clearInterval(timer); clearInterval(textTimer);
+        clearWaitingProgress();
+        draft.lastTaskError = null;
         draft.currentTask = task; saveDraft(); go("result");
       }
       if (task.status === "failed") {
         clearInterval(timer); clearInterval(textTimer);
-        toast(task.error_message || "生成失败，积分已退还"); go("confirm");
+        clearWaitingProgress();
+        draft.lastTaskError = { message: task.error_message || "生成失败，积分已退还", task_id: task.task_id };
+        saveDraft();
+        toast(draft.lastTaskError.message); go("confirm");
+      }
+      if (Date.now() - startedAt > maxWaitMs) {
+        clearInterval(timer); clearInterval(textTimer);
+        clearWaitingProgress();
+        draft.lastTaskError = {
+          message: "生成时间较长，已退出等待页。任务仍会在后台继续处理，完成后会出现在作品库；如果长时间没有结果，请联系管理员查看任务状态。",
+          task_id: task.task_id,
+        };
+        saveDraft();
+        toast("生成时间较长，已返回确认页");
+        go("confirm");
       }
     } catch (e) {
-      clearInterval(timer); clearInterval(textTimer); toast(e.message); go("home");
+      clearInterval(timer); clearInterval(textTimer); clearWaitingProgress();
+      draft.lastTaskError = { message: e.message, task_id: taskId };
+      saveDraft();
+      toast(e.message); go("confirm");
     }
   }, 1200);
+}
+
+function clearTaskError() {
+  draft.lastTaskError = null;
+  saveDraft();
+  render();
 }
 
 function renderResult() {
@@ -419,9 +517,11 @@ function renderResult() {
       <img class="poster-preview" src="${asset(task.result_image_url)}" alt="生成海报">
       <span class="version-chip">V1 初次生成</span>
     </section>
-    <button class="primary" onclick="downloadImage('${task.result_image_url || ""}')">下载高清图</button>
-    <button class="secondary soft-secondary" onclick="go('edit')">继续修改</button>
-    <div class="actions"><button class="ghost" onclick="go('confirm')">重新生成</button><button class="ghost" onclick="go('works')">作品库</button></div>`);
+    <div class="result-actions">
+      <button class="primary" onclick="downloadImage('${task.result_image_url || ""}')">下载原图</button>
+      <button class="secondary" onclick="go('edit')">继续修改</button>
+    </div>
+    <div class="result-links"><button onclick="go('confirm')">重新生成</button><button onclick="go('works')">作品库</button></div>`);
 }
 
 function downloadImage(url) {

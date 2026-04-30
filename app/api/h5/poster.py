@@ -1,11 +1,11 @@
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.api.deps import current_user
 from app.db import get_db
 from app.models import PosterTask, User
-from app.services.poster import create_generate_task, create_modify_task
+from app.services.poster import create_generate_task, create_modify_task, process_task
 
 router = APIRouter(prefix="/poster", tags=["h5-poster"])
 
@@ -17,7 +17,9 @@ class GenerateRequest(BaseModel):
     subtitle: str = ""
     selling_points: str = ""
     style: str
+    poster_type: str = "product"
     ratio: str = "3:4"
+    image_quality: str = "medium"
 
 
 class ModifyRequest(BaseModel):
@@ -31,6 +33,8 @@ def task_payload(task: PosterTask) -> dict:
         "task_id": task.id,
         "status": task.status,
         "points_cost": task.points_cost,
+        "image_quality": task.image_quality,
+        "poster_type": task.poster_type,
         "result_image_url": task.result_image_url,
         "work_id": task.work_id,
         "version_id": task.version_id,
@@ -41,6 +45,7 @@ def task_payload(task: PosterTask) -> dict:
 @router.post("/generate")
 def generate(
     payload: GenerateRequest,
+    background_tasks: BackgroundTasks,
     user: User = Depends(current_user),
     db: Session = Depends(get_db),
 ):
@@ -53,18 +58,23 @@ def generate(
         payload.subtitle,
         payload.selling_points,
         payload.style,
+        payload.poster_type,
         payload.ratio,
+        payload.image_quality,
     )
+    background_tasks.add_task(process_task, task.id)
     return task_payload(task)
 
 
 @router.post("/modify")
 def modify(
     payload: ModifyRequest,
+    background_tasks: BackgroundTasks,
     user: User = Depends(current_user),
     db: Session = Depends(get_db),
 ):
     task = create_modify_task(db, user, payload.work_id, payload.version_id, payload.edit_instruction)
+    background_tasks.add_task(process_task, task.id)
     return task_payload(task)
 
 

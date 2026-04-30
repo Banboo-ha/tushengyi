@@ -19,8 +19,10 @@ def list_tasks(_: Admin = Depends(current_admin), db: Session = Depends(get_db))
                 "task_type": task.task_type,
                 "status": task.status,
                 "title": task.title,
+                "poster_type": task.poster_type,
                 "style": task.style,
                 "ratio": task.ratio,
+                "image_quality": task.image_quality,
                 "points_cost": task.points_cost,
                 "result_image_url": task.result_image_url,
                 "error_message": task.error_message,
@@ -31,4 +33,3 @@ def list_tasks(_: Admin = Depends(current_admin), db: Session = Depends(get_db))
             for task in tasks
         ]
     }
-

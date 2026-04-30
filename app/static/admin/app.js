@@ -7,17 +7,30 @@ let cache = {};
 
 function token() { return localStorage.getItem(tokenKey); }
 function toast(message) {
-  toastEl.textContent = message;
+  toastEl.textContent = formatErrorMessage(message).split("\n")[0];
   toastEl.classList.add("show");
   setTimeout(() => toastEl.classList.remove("show"), 2400);
 }
 function authHeaders() { return token() ? { Authorization: `Bearer ${token()}` } : {}; }
+class ApiError extends Error {
+  constructor(detail) {
+    super(formatErrorMessage(detail));
+    this.detail = detail;
+  }
+}
+function formatErrorMessage(detail) {
+  if (!detail) return "请求失败";
+  if (typeof detail === "string") return detail;
+  if (detail.message) return detail.message;
+  if (Array.isArray(detail)) return detail.map(item => item.msg || JSON.stringify(item)).join("\n");
+  return JSON.stringify(detail, null, 2);
+}
 async function request(path, options = {}) {
   const headers = { ...(options.headers || {}), ...authHeaders() };
   if (options.body) headers["Content-Type"] = "application/json";
   const res = await fetch(api + path, { ...options, headers });
   const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(data.detail || "请求失败");
+  if (!res.ok) throw new ApiError(data.detail || data || "请求失败");
   return data;
 }
 function go(name) { page = name; location.hash = name; render(); }
@@ -152,15 +165,17 @@ async function renderSettings() {
   const s = await request("/settings");
   layout(`${pageHeader("系统设置")}
     <section class="card settings">
-      <div class="wide section-title"><h2>图片模型</h2><p>H5 生成海报实际调用这里。502 多数来自接口类型、模型名、尺寸或上游服务错误。</p></div>
-      ${field("image_base_url", "图片 Base URL", s.image_base_url || s.model_base_url, "wide")}
-      ${field("image_api_key", "图片 API Key", s.image_api_key || s.model_api_key, "wide", "password")}
-      ${field("image_model_name", "图片模型名称", s.image_model_name || s.model_name)}
-      <div class="field"><label>图片接口类型</label><select id="image_api_type">
-        <option value="images_edits" ${s.image_api_type === "images_edits" ? "selected" : ""}>Images Edits: /images/edits（图生图，推荐）</option>
-        <option value="images_generations" ${s.image_api_type === "images_generations" ? "selected" : ""}>Images: /images/generations</option>
-        <option value="responses" ${s.image_api_type === "responses" ? "selected" : ""}>Responses: /responses + image_generation</option>
-      </select></div>
+      <div class="wide section-title"><h2>统一模型</h2><p>全站统一使用这个 Responses 对话模型。H5 海报生成会通过同一个模型调用 image_generation 工具完成。</p></div>
+      ${field("model_base_url", "模型 Base URL", s.model_base_url || s.image_base_url || s.chat_base_url, "wide")}
+      ${field("model_api_key", "API Key", s.model_api_key || s.image_api_key || s.chat_api_key, "wide", "password")}
+      ${field("model_name", "模型名称", s.model_name || "gpt-5.5")}
+      <div class="field"><label>接口方式</label><input value="Responses: /responses" disabled></div>
+      <div class="field wide action-row">
+        <button class="secondary" onclick="testModel('chat')">测试模型文本</button>
+      </div>
+
+      <div class="wide section-title"><h2>图片生成设置</h2><p>这里仅配置图片生成参数，不再单独配置绘图模型。默认使用上方统一模型 gpt-5.5。</p></div>
+      <div class="field"><label>图片生成方式</label><input value="Responses image_generation" disabled></div>
       <div class="field"><label>图片尺寸策略</label><select id="image_size_mode">
         <option value="ratio_standard" ${s.image_size_mode === "ratio_standard" ? "selected" : ""}>按比例映射 OpenAI 标准尺寸</option>
         <option value="auto" ${s.image_size_mode === "auto" ? "selected" : ""}>auto</option>
@@ -171,18 +186,24 @@ async function renderSettings() {
       ${field("image_file_field", "图生图文件字段名", s.image_file_field || "image")}
       ${field("image_response_format", "图片 response_format（可空）", s.image_response_format)}
       ${field("image_quality", "图片 quality（可空）", s.image_quality)}
-      <div class="field wide"><button class="secondary" onclick="testModel('image')">测试真实图片接口</button></div>
-
-      <div class="wide section-title"><h2>对话模型</h2><p>用于后续 AI 文案辅助、Prompt 优化等文本任务；不直接生成海报图片。</p></div>
-      ${field("chat_base_url", "对话 Base URL", s.chat_base_url || s.model_base_url, "wide")}
-      ${field("chat_api_key", "对话 API Key", s.chat_api_key || s.model_api_key, "wide", "password")}
-      ${field("chat_model_name", "对话模型名称", s.chat_model_name)}
-      <div class="field"><label>对话接口类型</label><select id="chat_api_type">
-        <option value="chat_completions" ${s.chat_api_type === "chat_completions" ? "selected" : ""}>Chat Completions: /chat/completions</option>
-        <option value="responses" ${s.chat_api_type === "responses" ? "selected" : ""}>Responses: /responses</option>
+      <div class="field"><label>Responses action</label><select id="image_generation_action">
+        <option value="" ${!s.image_generation_action ? "selected" : ""}>不传 action（兼容性最好）</option>
+        <option value="auto" ${s.image_generation_action === "auto" ? "selected" : ""}>auto</option>
+        <option value="edit" ${s.image_generation_action === "edit" ? "selected" : ""}>edit</option>
+        <option value="generate" ${s.image_generation_action === "generate" ? "selected" : ""}>generate</option>
       </select></div>
+      <div class="field wide action-row">
+        <button class="secondary" onclick="testModel('image')">测试真实图片接口</button>
+        <button class="secondary" onclick="testModel('responses_diagnostics')">Responses 分步诊断</button>
+      </div>
+
+      <div class="wide section-title"><h2>海报提示词模板</h2><p>生成时会按类型套用模板。可用变量：{{title}}、{{subtitle}}、{{selling_points}}、{{product_reference}}、{{reference_materials}}、{{style_label}}、{{ratio}}、{{quality_label}}。</p></div>
+      ${textareaField("prompt_template_product", "产品宣传海报模板", s.prompt_template_product, "wide")}
+      ${textareaField("prompt_template_xiaohongshu", "小红书种草图模板", s.prompt_template_xiaohongshu, "wide")}
+      ${textareaField("prompt_template_main_image", "电商主图模板", s.prompt_template_main_image, "wide")}
+      ${textareaField("prompt_template_promotion", "活动促销海报模板", s.prompt_template_promotion, "wide")}
+
       <div class="field"><label>Mock 模式</label><select id="mock_mode"><option value="true" ${s.mock_mode === "true" ? "selected" : ""}>开启，H5 不调用真实图片接口</option><option value="false" ${s.mock_mode === "false" ? "selected" : ""}>关闭，H5 调用真实图片接口</option></select></div>
-      <div class="field wide"><button class="secondary" onclick="testModel('chat')">测试对话接口</button></div>
 
       <div class="wide section-title"><h2>积分规则</h2></div>
       ${field("signup_points", "注册赠送积分", s.signup_points)}
@@ -197,23 +218,32 @@ function field(id, label, value, cls = "", type = "text") {
   return `<div class="field ${cls}"><label>${label}</label><input id="${id}" type="${type}" value="${String(value || "").replaceAll('"', "&quot;")}"></div>`;
 }
 
+function textareaField(id, label, value, cls = "") {
+  return `<div class="field ${cls}"><label>${label}</label><textarea id="${id}" rows="9">${escapeHtml(value)}</textarea></div>`;
+}
+
 async function saveSettings() {
   const payload = {
-    model_base_url: image_base_url.value,
-    model_api_key: image_api_key.value,
-    model_name: image_model_name.value,
-    image_base_url: image_base_url.value,
-    image_api_key: image_api_key.value,
-    image_model_name: image_model_name.value,
-    image_api_type: image_api_type.value,
+    model_base_url: model_base_url.value,
+    model_api_key: model_api_key.value,
+    model_name: model_name.value || "gpt-5.5",
+    image_base_url: model_base_url.value,
+    image_api_key: model_api_key.value,
+    image_model_name: model_name.value || "gpt-5.5",
+    image_api_type: "responses",
     image_size_mode: image_size_mode.value,
     image_file_field: image_file_field.value,
     image_response_format: image_response_format.value,
     image_quality: image_quality.value,
-    chat_base_url: chat_base_url.value,
-    chat_api_key: chat_api_key.value,
-    chat_model_name: chat_model_name.value,
-    chat_api_type: chat_api_type.value,
+    image_generation_action: image_generation_action.value,
+    prompt_template_product: prompt_template_product.value,
+    prompt_template_xiaohongshu: prompt_template_xiaohongshu.value,
+    prompt_template_main_image: prompt_template_main_image.value,
+    prompt_template_promotion: prompt_template_promotion.value,
+    chat_base_url: model_base_url.value,
+    chat_api_key: model_api_key.value,
+    chat_model_name: model_name.value || "gpt-5.5",
+    chat_api_type: "responses",
     mock_mode: mock_mode.value,
     signup_points: Number(signup_points.value),
     generate_cost: Number(generate_cost.value),
@@ -226,21 +256,30 @@ async function saveSettings() {
 }
 
 async function testModel(target) {
-  const label = target === "image" ? "图片" : "对话";
+  const label = target === "image" ? "图片" : (target === "responses_diagnostics" ? "Responses 诊断" : "对话");
   if (target === "image" && !confirm("测试真实图片接口会调用上游模型服务，可能产生一次图片生成费用。确认测试？")) return;
+  if (target === "responses_diagnostics" && !confirm("Responses 分步诊断会依次测试文本、文生图、图生图能力，可能产生图片生成费用。确认测试？")) return;
   try {
     await saveSettings();
     const data = await request("/settings/test", { method: "POST", body: JSON.stringify({ target }) });
     const result = document.querySelector("#testResult");
-    if (result) {
-      result.innerHTML = `<b>${label}接口测试成功</b><pre>${escapeHtml(JSON.stringify(data, null, 2))}</pre>${data.image_url ? `<img class="test-image" src="${data.image_url}">` : ""}`;
-    }
-    toast(`${label}接口测试成功`);
+    if (result) result.innerHTML = renderTestResult(label, data);
+    toast(data.ok === false ? `${label}存在失败项` : `${label}接口测试成功`);
   } catch (e) {
     const result = document.querySelector("#testResult");
-    if (result) result.innerHTML = `<b class="danger-text">${label}接口测试失败</b><pre>${escapeHtml(e.message)}</pre>`;
-    toast(e.message);
+    const detail = e.detail || e.message;
+    let message = formatErrorMessage(detail);
+    if (detail && detail.request_preview) {
+      message = `${message}\n\n请求摘要：\n${JSON.stringify(detail.request_preview, null, 2)}`;
+    }
+    if (result) result.innerHTML = `<b class="danger-text">${label}接口测试失败</b><pre>${escapeHtml(message)}</pre>`;
+    toast(message);
   }
+}
+
+function renderTestResult(label, data) {
+  const ok = data.ok !== false;
+  return `<b class="${ok ? "" : "danger-text"}">${label}${ok ? "接口测试成功" : "存在失败项"}</b><pre>${escapeHtml(JSON.stringify(data, null, 2))}</pre>${data.image_url ? `<img class="test-image" src="${data.image_url}">` : ""}`;
 }
 
 function renderSpecs(specs) {

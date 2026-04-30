@@ -2,9 +2,11 @@ import base64
 import json
 import mimetypes
 import os
+import struct
 import textwrap
 import urllib.error
 import urllib.request
+import zlib
 from html import escape
 from pathlib import Path
 from typing import Optional
@@ -25,6 +27,7 @@ class AIImageClient:
         response_format: str = "",
         quality: str = "auto",
         file_field: str = "image",
+        generation_action: str = "",
     ):
         self.base_url = base_url.rstrip("/")
         self.api_key = api_key
@@ -35,6 +38,7 @@ class AIImageClient:
         self.response_format = response_format
         self.quality = quality
         self.file_field = file_field or "image"
+        self.generation_action = generation_action
 
     def generate_image(self, prompt: str, ratio: str, title: str = "AI 海报", image_paths: Optional[list[str]] = None) -> str:
         image_paths = [path for path in (image_paths or []) if path and Path(path).exists()]
@@ -47,14 +51,61 @@ class AIImageClient:
         return self._openai_image(prompt, ratio)
 
     def test_image(self) -> dict:
-        test_paths = [self._test_reference_image()] if self.api_type == "images_edits" else []
+        test_paths = [self._test_reference_image()] if self.api_type in {"images_edits", "responses"} else []
         image_url = self.generate_image("生成一张用于接口连通性测试的极简蓝色产品海报，不要包含敏感内容。", "1:1", "接口测试", test_paths)
         return {
             "ok": True,
             "api_type": self.api_type,
             "model": self.model,
             "image_inputs": len(test_paths),
+            "request_preview": self.preview_image_request(
+                "生成一张用于接口连通性测试的极简蓝色产品海报，不要包含敏感内容。",
+                "1:1",
+                test_paths,
+            ),
             "image_url": image_url,
+        }
+
+    def diagnose_responses_image(self) -> dict:
+        if self.api_type != "responses":
+            raise RuntimeError("Responses 诊断只适用于 /responses 图片接口类型")
+        steps = []
+
+        text_payload = {
+            "model": self.model,
+            "input": "请只回复 pong",
+            "max_output_tokens": 16,
+        }
+        text_step = self._diagnose_responses_step("responses_text", text_payload)
+        steps.append(text_step)
+        if not text_step["ok"]:
+            return {"ok": False, "api_type": self.api_type, "model": self.model, "steps": steps}
+
+        text_to_image_payload = {
+            "model": self.model,
+            "input": "Generate a simple clean blue product poster with no text.",
+            "tools": [{"type": "image_generation"}],
+        }
+        text_to_image_step = self._diagnose_responses_step("image_generation_text_only", text_to_image_payload)
+        steps.append(text_to_image_step)
+        if not text_to_image_step["ok"]:
+            return {"ok": False, "api_type": self.api_type, "model": self.model, "steps": steps}
+
+        reference_path = self._test_reference_image()
+        image_payload = self._responses_payload(
+            "Generate a simple clean blue product poster using the provided image as visual reference.",
+            "1:1",
+            [reference_path],
+            include_tool_choice=False,
+            include_output_options=False,
+        )
+        image_step = self._diagnose_responses_step("image_generation_with_input_image", image_payload)
+        steps.append(image_step)
+        return {
+            "ok": all(step["ok"] for step in steps),
+            "api_type": self.api_type,
+            "model": self.model,
+            "steps": steps,
         }
 
     def _mock_image(self, prompt: str, ratio: str, title: str) -> str:
@@ -110,7 +161,7 @@ class AIImageClient:
             payload["response_format"] = self.response_format
         if self.quality:
             payload["quality"] = self.quality
-        result = self._post_json(endpoint, payload, timeout=120)
+        result = self._post_json(endpoint, payload, timeout=180)
 
         item = (result.get("data") or [{}])[0]
         if item.get("b64_json"):
@@ -142,25 +193,121 @@ class AIImageClient:
 
     def _responses_image(self, prompt: str, ratio: str, image_paths: list[str]) -> str:
         endpoint = f"{self.base_url}/responses"
-        content = [{"type": "input_text", "text": prompt}]
-        for path in image_paths[:8]:
-            content.append({"type": "input_image", "image_url": self._data_url(path)})
-        payload = {
-            "model": self.model,
-            "input": [{"role": "user", "content": content}] if image_paths else prompt,
-            "tools": [{"type": "image_generation"}],
-        }
-        result = self._post_json(endpoint, payload, timeout=120)
+        payload = self._responses_payload(prompt, ratio, image_paths)
+        result = self._post_json(endpoint, payload, timeout=180)
         for output in result.get("output", []):
             if output.get("type") in {"image_generation_call", "output_image"} and output.get("result"):
                 return self._save_b64_image(output["result"])
+            if output.get("type") in {"image_generation_call", "output_image"} and output.get("image_url"):
+                return self._download_remote_image(output["image_url"])
             for content in output.get("content", []):
                 if content.get("type") in {"output_image", "image"}:
                     if content.get("b64_json"):
                         return self._save_b64_image(content["b64_json"])
+                    if content.get("result"):
+                        return self._save_b64_image(content["result"])
                     if content.get("image_url"):
                         return self._download_remote_image(content["image_url"])
         raise RuntimeError("Responses 接口未返回图片")
+
+    def _responses_payload(
+        self,
+        prompt: str,
+        ratio: str,
+        image_paths: list[str],
+        include_tool_choice: bool = True,
+        include_output_options: bool = True,
+    ) -> dict:
+        content = [{"type": "input_text", "text": prompt}]
+        for path in image_paths[:8]:
+            content.append({"type": "input_image", "image_url": self._data_url(path)})
+        tool = {"type": "image_generation"}
+        if include_output_options:
+            tool["size"] = self._api_size(ratio)
+            tool["quality"] = self.quality or "auto"
+        if include_output_options and self.generation_action:
+            tool["action"] = self.generation_action
+        payload = {
+            "model": self.model,
+            "input": [{"role": "user", "content": content}],
+            "tools": [tool],
+        }
+        if include_tool_choice:
+            payload["tool_choice"] = {"type": "image_generation"}
+        return payload
+
+    def _diagnose_responses_step(self, name: str, payload: dict) -> dict:
+        try:
+            result = self._post_json(f"{self.base_url}/responses", payload, timeout=180)
+            return {
+                "name": name,
+                "ok": True,
+                "request_preview": self._preview_responses_payload(payload),
+                "response_summary": self._responses_summary(result),
+            }
+        except Exception as exc:
+            return {
+                "name": name,
+                "ok": False,
+                "error": str(exc),
+                "request_preview": self._preview_responses_payload(payload),
+            }
+
+    def _responses_summary(self, result: dict) -> dict:
+        output = result.get("output") or []
+        return {
+            "id": result.get("id", ""),
+            "status": result.get("status", ""),
+            "output_types": [item.get("type", "") for item in output],
+            "has_image_result": any(bool(item.get("result") or item.get("image_url")) for item in output),
+            "output_text": (result.get("output_text") or "")[:120],
+        }
+
+    def _preview_responses_payload(self, payload: dict) -> dict:
+        preview = json.loads(json.dumps(payload, ensure_ascii=False))
+        input_items = preview.get("input", [])
+        if isinstance(input_items, list):
+            for input_item in input_items:
+                for content in input_item.get("content", []) if isinstance(input_item, dict) else []:
+                    if isinstance(content, dict) and content.get("type") == "input_image":
+                        content["image_url"] = f"<base64 data URL, {len(content['image_url'])} chars>"
+        return preview
+
+    def preview_image_request(self, prompt: str, ratio: str, image_paths: list[str]) -> dict:
+        if self.api_type == "responses":
+            payload = self._responses_payload(prompt, ratio, image_paths)
+            return {
+                "endpoint": f"{self.base_url}/responses",
+                "method": "POST",
+                "content_type": "application/json",
+                "payload": self._preview_responses_payload(payload),
+            }
+        if self.api_type == "images_edits" or image_paths:
+            return {
+                "endpoint": f"{self.base_url}/images/edits",
+                "method": "POST",
+                "content_type": "multipart/form-data",
+                "fields": {
+                    "model": self.model,
+                    "prompt": prompt,
+                    "n": "1",
+                    "size": self._api_size(ratio),
+                    "quality": self.quality or "",
+                },
+                "files": [{"field": self.file_field, "path": Path(path).name} for path in image_paths[:8]],
+            }
+        return {
+            "endpoint": f"{self.base_url}/images/generations",
+            "method": "POST",
+            "content_type": "application/json",
+            "payload": {
+                "model": self.model,
+                "prompt": prompt,
+                "n": 1,
+                "size": self._api_size(ratio),
+                "quality": self.quality or "",
+            },
+        }
 
     def _image_result(self, result: dict) -> str:
         item = (result.get("data") or [{}])[0]
@@ -267,12 +414,49 @@ class AIImageClient:
 
     def _test_reference_image(self) -> str:
         path = UPLOAD_DIR / "model-test-reference.png"
-        if not path.exists():
-            raw = base64.b64decode(
-                "iVBORw0KGgoAAAANSUhEUgAAAEAAAAAkCAIAAACJ8g1GAAAAPUlEQVR4nO3OMQEAAAgDINc/9F0hQ4FIFtB0Z2YAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAADgG0kAAAFxF7P8AAAAAElFTkSuQmCC"
-            )
-            path.write_bytes(raw)
+        if not path.exists() or path.stat().st_size < 1024:
+            path.write_bytes(self._sample_reference_png())
         return str(path)
+
+    def _sample_reference_png(self) -> bytes:
+        width = 512
+        height = 512
+        rows = bytearray()
+        for y in range(height):
+            rows.append(0)
+            for x in range(width):
+                bg_r = 222 + int(26 * x / width)
+                bg_g = 235 + int(12 * y / height)
+                bg_b = 255
+                in_card = 126 <= x <= 386 and 98 <= y <= 414
+                in_label = 174 <= x <= 338 and 316 <= y <= 354
+                in_cap = 218 <= x <= 294 and 72 <= y <= 108
+                if in_card:
+                    r, g, b = 72, 139, 244
+                    if 156 <= x <= 356 and 128 <= y <= 300:
+                        r, g, b = 245, 250, 255
+                    if in_label:
+                        r, g, b = 38, 99, 214
+                elif in_cap:
+                    r, g, b = 42, 82, 160
+                else:
+                    r, g, b = bg_r, bg_g, bg_b
+                rows.extend((r, g, b))
+
+        def chunk(kind: bytes, data: bytes) -> bytes:
+            return (
+                struct.pack(">I", len(data))
+                + kind
+                + data
+                + struct.pack(">I", zlib.crc32(kind + data) & 0xFFFFFFFF)
+            )
+
+        return (
+            b"\x89PNG\r\n\x1a\n"
+            + chunk(b"IHDR", struct.pack(">IIBBBBB", width, height, 8, 2, 0, 0, 0))
+            + chunk(b"IDAT", zlib.compress(bytes(rows), level=6))
+            + chunk(b"IEND", b"")
+        )
 
     def _ratio_size(self, ratio: str) -> tuple[int, int]:
         return {
@@ -298,7 +482,7 @@ class AIImageClient:
 
 
 class AITextClient:
-    def __init__(self, base_url: str, api_key: str, model: str, api_type: str = "chat_completions"):
+    def __init__(self, base_url: str, api_key: str, model: str, api_type: str = "responses"):
         self.base_url = base_url.rstrip("/")
         self.api_key = api_key
         self.model = model

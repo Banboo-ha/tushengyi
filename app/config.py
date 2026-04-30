@@ -26,7 +26,7 @@ def read_default_model_config() -> dict:
     config = {
         "model_base_url": "http://43.159.147.220:8080/v1",
         "model_api_key": "",
-        "model_name": "gpt-image-1",
+        "model_name": "gpt-5.5",
         "mock_mode": "true",
     }
     if not PRD_APIKEY_FILE.exists():

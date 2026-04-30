@@ -62,7 +62,9 @@ class PosterTask(Base):
     subtitle: Mapped[str] = mapped_column(String(160), default="")
     selling_points: Mapped[str] = mapped_column(Text, default="")
     style: Mapped[str] = mapped_column(String(80), default="")
+    poster_type: Mapped[str] = mapped_column(String(40), default="product")
     ratio: Mapped[str] = mapped_column(String(20), default="3:4")
+    image_quality: Mapped[str] = mapped_column(String(20), default="medium")
     edit_instruction: Mapped[str] = mapped_column(Text, default="")
     points_cost: Mapped[int] = mapped_column(Integer, default=0)
     prompt: Mapped[str] = mapped_column(Text, default="")
@@ -119,4 +121,3 @@ class SystemSetting(Base):
     key: Mapped[str] = mapped_column(String(80), primary_key=True)
     value: Mapped[str] = mapped_column(Text, default="")
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=now, onupdate=now)
-

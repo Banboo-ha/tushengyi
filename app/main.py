@@ -13,6 +13,13 @@ from app.services.settings import init_defaults
 def create_app() -> FastAPI:
     ensure_runtime_dirs()
     Base.metadata.create_all(bind=engine)
+    with engine.begin() as conn:
+        if engine.url.get_backend_name() == "sqlite":
+            columns = {row[1] for row in conn.execute(text("PRAGMA table_info(poster_tasks)"))}
+            if "image_quality" not in columns:
+                conn.execute(text("ALTER TABLE poster_tasks ADD COLUMN image_quality VARCHAR(20) DEFAULT 'medium'"))
+            if "poster_type" not in columns:
+                conn.execute(text("ALTER TABLE poster_tasks ADD COLUMN poster_type VARCHAR(40) DEFAULT 'product'"))
     db = SessionLocal()
     try:
         init_defaults(db)

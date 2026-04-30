@@ -43,25 +43,26 @@ python scripts/worker.py
 - Mock 模式：开启时 H5 不调用真实图片接口；关闭时调用真实图片接口。
 - 测试接口：后台可单独测试对话模型或真实图片模型。
 
-图片模型默认接口类型为 `Images Edits: /images/edits`，会把用户上传的产品图、参考图作为 multipart 图片文件一起传给模型。把 Mock 模式改为关闭后，后端主流程会调用：
+图片模型默认接口类型为 `Responses: /responses + image_generation`，会把海报提示词模板、用户上传的产品图和参考图一起传给模型。把 Mock 模式改为关闭后，后端主流程会调用：
 
 ```text
-{model_base_url}/images/edits
+{model_base_url}/responses
 ```
 
-请求体采用 OpenAI 图片编辑 / 图生图风格：
+请求体采用 OpenAI Responses 多模态图生图风格：
 
 ```text
-multipart/form-data
-model=gpt-image-1
-prompt=...
-n=1
-size=1024x1536
-image=<产品图文件，可重复>
-image=<参考图文件，可重复>
+model=gpt-5.5
+input=[{role=user, content=[
+  {type=input_text, text=<提示词模板渲染结果>},
+  {type=input_image, image_url=<产品图 base64 data URL>},
+  {type=input_image, image_url=<参考图 base64 data URL>}
+]}]
+tools=[{type=image_generation, size=1024x1536, quality=high, action=edit}]
+tool_choice={type=image_generation}
 ```
 
-如果选择 `Images: /images/generations`，则是纯文生图，不会携带产品图/参考图，不建议用于当前 H5 主流程。
+如果选择 `Images: /images/generations`，则是纯文生图，不会携带产品图/参考图，不建议用于当前 H5 主流程。`Images Edits: /images/edits` 保留为兼容图生图接口。
 
 实际请求尺寸默认使用 OpenAI 标准尺寸映射：
 
