@@ -35,6 +35,11 @@ const qualityOptions = [
   ["medium", "高清", 8],
   ["high", "超清", 10],
 ];
+const uploadCompressOptions = {
+  maxSide: 2200,
+  quality: 0.88,
+  maxRawSize: 30 * 1024 * 1024,
+};
 
 const homeFeatures = [
   ["product", "产品海报", "突出卖点", "产品海报icon.png"],
@@ -296,11 +301,12 @@ async function uploadFiles(event, key, imageType) {
   const files = Array.from(event.target.files || []);
   for (const file of files) {
     if ((draft[key] || []).length >= 4) return toast("最多只能上传 4 张");
-    const form = new FormData();
-    form.append("image_type", imageType);
-    form.append("reference_type", imageType === "reference" ? (document.querySelector("#refType")?.value || "other") : "");
-    form.append("file", file);
     try {
+      const uploadFile = await compressImageForUpload(file);
+      const form = new FormData();
+      form.append("image_type", imageType);
+      form.append("reference_type", imageType === "reference" ? (document.querySelector("#refType")?.value || "other") : "");
+      form.append("file", uploadFile);
       const data = await request("/upload/image", { method: "POST", body: form });
       draft[key] = [...(draft[key] || []), data];
       saveDraft();
@@ -308,6 +314,43 @@ async function uploadFiles(event, key, imageType) {
       render();
     } catch (e) { toast(e.message); }
   }
+}
+
+function loadImageFromFile(file) {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file);
+    const image = new Image();
+    image.onload = () => {
+      URL.revokeObjectURL(url);
+      resolve(image);
+    };
+    image.onerror = () => {
+      URL.revokeObjectURL(url);
+      reject(new Error("图片读取失败，请换一张图片"));
+    };
+    image.src = url;
+  });
+}
+
+async function compressImageForUpload(file) {
+  if (!file.type.startsWith("image/")) throw new Error("请选择图片文件");
+  if (file.size > uploadCompressOptions.maxRawSize) throw new Error("图片过大，请先压缩后重新上传");
+  if (!window.HTMLCanvasElement) return file;
+  const image = await loadImageFromFile(file);
+  const scale = Math.min(1, uploadCompressOptions.maxSide / Math.max(image.naturalWidth, image.naturalHeight));
+  const width = Math.max(1, Math.round(image.naturalWidth * scale));
+  const height = Math.max(1, Math.round(image.naturalHeight * scale));
+  const canvas = document.createElement("canvas");
+  canvas.width = width;
+  canvas.height = height;
+  const ctx = canvas.getContext("2d");
+  ctx.fillStyle = "#fff";
+  ctx.fillRect(0, 0, width, height);
+  ctx.drawImage(image, 0, 0, width, height);
+  const blob = await new Promise(resolve => canvas.toBlob(resolve, "image/jpeg", uploadCompressOptions.quality));
+  if (!blob) return file;
+  const compressed = new File([blob], file.name.replace(/\.[^.]+$/, "") + ".jpg", { type: "image/jpeg" });
+  return compressed.size < file.size || file.size > 2 * 1024 * 1024 ? compressed : file;
 }
 
 function removeImage(key, index) {
