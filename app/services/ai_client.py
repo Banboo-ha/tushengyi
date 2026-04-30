@@ -1,5 +1,6 @@
 import base64
 import json
+import logging
 import mimetypes
 import os
 import struct
@@ -13,6 +14,9 @@ from typing import Optional
 
 from app.config import UPLOAD_DIR
 from app.services.ids import new_id
+
+
+logger = logging.getLogger(__name__)
 
 
 class AIImageClient:
@@ -194,7 +198,40 @@ class AIImageClient:
     def _responses_image(self, prompt: str, ratio: str, image_paths: list[str]) -> str:
         endpoint = f"{self.base_url}/responses"
         payload = self._responses_payload(prompt, ratio, image_paths)
-        result = self._post_json(endpoint, payload, timeout=180)
+        try:
+            result = self._post_json(endpoint, payload, timeout=180)
+        except Exception as exc:
+            if not image_paths:
+                raise
+            logger.warning(
+                "responses image request failed, retrying compact payload: prompt_len=%s image_count=%s size=%s quality=%s error=%s",
+                len(prompt or ""),
+                len(image_paths),
+                self._api_size(ratio),
+                self.quality or "auto",
+                exc,
+            )
+            compact_payload = self._responses_payload(
+                prompt,
+                ratio,
+                image_paths,
+                include_tool_choice=False,
+                include_output_options=False,
+            )
+            try:
+                result = self._post_json(endpoint, compact_payload, timeout=180)
+            except Exception as retry_exc:
+                preview = self._preview_responses_payload(payload)
+                compact_preview = self._preview_responses_payload(compact_payload)
+                raise RuntimeError(
+                    "AI 接口失败：标准 Responses 图生图请求失败，兼容模式重试也失败。"
+                    f"原始错误：{exc}；重试错误：{retry_exc}；"
+                    f"请求摘要：prompt_len={len(prompt or '')}, image_count={len(image_paths)}, "
+                    f"standard_tool={preview.get('tools')}, compact_tool={compact_preview.get('tools')}"
+                ) from retry_exc
+        return self._responses_result(result)
+
+    def _responses_result(self, result: dict) -> str:
         for output in result.get("output", []):
             if output.get("type") in {"image_generation_call", "output_image"} and output.get("result"):
                 return self._save_b64_image(output["result"])
