@@ -487,9 +487,8 @@ class AIImageClient:
                 image.save(buffer, format="JPEG", quality=RESPONSES_INPUT_JPEG_QUALITY, optimize=True)
                 raw = buffer.getvalue()
             original_size = source.stat().st_size
-            if len(raw) < original_size:
-                logger.info("compressed responses input image: %s -> %s bytes", original_size, len(raw))
-                return f"data:image/jpeg;base64,{base64.b64encode(raw).decode('utf-8')}"
+            logger.info("normalized responses input image to jpeg: %s -> %s bytes", original_size, len(raw))
+            return f"data:image/jpeg;base64,{base64.b64encode(raw).decode('utf-8')}"
         except Exception as exc:
             logger.warning("failed to compress responses input image %s: %s", path, exc)
         return self._data_url(path)
