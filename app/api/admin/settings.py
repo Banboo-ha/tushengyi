@@ -7,6 +7,7 @@ from app.db import get_db
 from app.models import Admin
 from app.services.ai_client import AIImageClient, AITextClient
 from app.services.settings import (
+    PROMPT_COMMON,
     PROMPT_TEMPLATE_MAIN_IMAGE,
     PROMPT_TEMPLATE_PRODUCT,
     PROMPT_TEMPLATE_PROMOTION,
@@ -36,6 +37,7 @@ class SettingsRequest(BaseModel):
     image_quality: str = ""
     image_file_field: str = "image"
     image_generation_action: str = ""
+    prompt_common: str = PROMPT_COMMON
     prompt_template_product: str = PROMPT_TEMPLATE_PRODUCT
     prompt_template_xiaohongshu: str = PROMPT_TEMPLATE_XIAOHONGSHU
     prompt_template_main_image: str = PROMPT_TEMPLATE_MAIN_IMAGE
@@ -51,6 +53,29 @@ class TestModelRequest(BaseModel):
 
 @router.get("")
 def get_settings(_: Admin = Depends(current_admin), db: Session = Depends(get_db)):
+    return {**all_settings(db), "model_specs": model_specs()}
+
+
+def default_prompt_settings() -> dict:
+    return {
+        "prompt_common": PROMPT_COMMON,
+        "prompt_template_product": PROMPT_TEMPLATE_PRODUCT,
+        "prompt_template_xiaohongshu": PROMPT_TEMPLATE_XIAOHONGSHU,
+        "prompt_template_main_image": PROMPT_TEMPLATE_MAIN_IMAGE,
+        "prompt_template_promotion": PROMPT_TEMPLATE_PROMOTION,
+    }
+
+
+@router.get("/prompt-defaults")
+def get_prompt_defaults(_: Admin = Depends(current_admin)):
+    return default_prompt_settings()
+
+
+@router.post("/prompt-reset")
+def reset_prompt_templates(_: Admin = Depends(current_admin), db: Session = Depends(get_db)):
+    for key, value in default_prompt_settings().items():
+        set_setting(db, key, value)
+    db.commit()
     return {**all_settings(db), "model_specs": model_specs()}
 
 

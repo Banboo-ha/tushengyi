@@ -67,6 +67,10 @@ function formatErrorMessage(detail) {
   if (Array.isArray(detail)) return detail.map(item => item.msg || JSON.stringify(item)).join("\n");
   return JSON.stringify(detail, null, 2);
 }
+function normalizeText(value) {
+  const text = String(value ?? "").trim();
+  return ["", "无", "暂无", "none", "null", "undefined", "N/A"].includes(text) ? "" : text;
+}
 
 async function request(path, options = {}) {
   const headers = { ...(options.headers || {}), ...authHeaders() };
@@ -329,10 +333,11 @@ function renderCopy() {
 }
 
 function saveCopy() {
-  if (!title.value.trim()) return toast("请填写主标题");
-  draft.title = title.value.trim();
-  draft.subtitle = subtitle.value.trim();
-  draft.selling_points = selling.value.trim();
+  const normalizedTitle = normalizeText(title.value);
+  if (!normalizedTitle) return toast("请填写主标题");
+  draft.title = normalizedTitle;
+  draft.subtitle = normalizeText(subtitle.value);
+  draft.selling_points = normalizeText(selling.value);
   saveDraft();
   go("confirm");
 }
@@ -397,9 +402,9 @@ async function createTask() {
       body: JSON.stringify({
         product_image_ids: (draft.productImages || []).map(i => i.image_id),
         reference_image_ids: (draft.referenceImages || []).map(i => i.image_id),
-        title: draft.title,
-        subtitle: draft.subtitle || "",
-        selling_points: draft.selling_points || "",
+        title: normalizeText(draft.title),
+        subtitle: normalizeText(draft.subtitle),
+        selling_points: normalizeText(draft.selling_points),
         style: draft.style || "premium_commercial",
         poster_type: draft.posterType || "product",
         ratio: draft.ratio || "9:16",

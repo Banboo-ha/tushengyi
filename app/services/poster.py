@@ -14,6 +14,7 @@ from app.models import PosterTask, PosterVersion, PosterWork, UploadedImage, Use
 from app.services.ai_client import AIImageClient
 from app.services.points import consume_points, refund_points
 from app.services.settings import (
+    PROMPT_COMMON,
     PROMPT_TEMPLATE_MAIN_IMAGE,
     PROMPT_TEMPLATE_PRODUCT,
     PROMPT_TEMPLATE_PROMOTION,
@@ -64,6 +65,20 @@ QUALITY_LABELS = {
     "high": "超清",
 }
 
+EMPTY_TEXT_VALUES = {"", "无", "暂无", "none", "null", "undefined", "n/a", "N/A", "None", "NULL", "Undefined"}
+
+PROMPT_STYLE_LABELS = {
+    "product": "product_ad",
+    "xiaohongshu": "xiaohongshu",
+    "main_image": "infographic",
+    "promotion": "promotion",
+}
+
+PROMPT_QUALITY_LABELS = {
+    "medium": "high",
+    "high": "commercial",
+}
+
 logger = logging.getLogger(__name__)
 
 
@@ -96,7 +111,7 @@ def validate_images(db: Session, user_id: str, ids: list[str], image_type: str, 
 def reference_material_lines(product_images: list[UploadedImage], reference_images: list[UploadedImage]) -> tuple[str, str]:
     product_line = f"参考素材：提供产品图 {len(product_images)} 张，请将其作为关键视觉参考。" if product_images else "参考素材：未提供产品图。"
     if not reference_images:
-        return product_line, "参考素材：未提供其他参考图。"
+        return product_line, ""
 
     grouped: dict[str, int] = {}
     for image in reference_images:
@@ -112,31 +127,40 @@ def reference_material_lines(product_images: list[UploadedImage], reference_imag
 def render_prompt_template(template: str, values: dict[str, str]) -> str:
     text = template
     for key, value in values.items():
-        text = text.replace("{{" + key + "}}", value or "无")
+        text = text.replace("{{" + key + "}}", value or "")
     return text.strip()
+
+
+def normalize_optional_text(value: str) -> str:
+    text = (value or "").strip()
+    return "" if text in EMPTY_TEXT_VALUES else text
 
 
 def build_generate_prompt(db: Session, task: PosterTask, product_images: list[UploadedImage], reference_images: list[UploadedImage]) -> str:
     poster_type = task.poster_type if task.poster_type in POSTER_TYPE_LABELS else "product"
+    common_template = get_setting(db, "prompt_common", PROMPT_COMMON).strip() or PROMPT_COMMON
     template = get_setting(
         db,
         f"prompt_template_{poster_type}",
         PROMPT_TEMPLATE_DEFAULTS[poster_type],
     ).strip() or PROMPT_TEMPLATE_DEFAULTS[poster_type]
+    assembled_template = f"{common_template}\n\n{template}".strip()
     product_reference, reference_materials = reference_material_lines(product_images, reference_images)
-    return render_prompt_template(template, {
+    return render_prompt_template(assembled_template, {
         "poster_type": poster_type,
         "poster_type_label": POSTER_TYPE_LABELS.get(poster_type, "产品广告海报"),
         "title": task.title,
-        "subtitle": task.subtitle or "无",
-        "selling_points": task.selling_points or "无",
+        "subtitle": normalize_optional_text(task.subtitle),
+        "selling_points": normalize_optional_text(task.selling_points),
         "product_count": str(len(product_images)),
         "reference_count": str(len(reference_images)),
         "product_reference": product_reference,
         "reference_materials": reference_materials,
-        "style_label": STYLE_LABELS.get(task.style, task.style or "无"),
+        "style_label": PROMPT_STYLE_LABELS.get(poster_type, "product_ad"),
+        "style_name": STYLE_LABELS.get(task.style, task.style or "无"),
         "ratio": task.ratio,
-        "quality_label": QUALITY_LABELS.get(task.image_quality, task.image_quality or "高清"),
+        "quality_label": PROMPT_QUALITY_LABELS.get(task.image_quality, "commercial"),
+        "quality_name": QUALITY_LABELS.get(task.image_quality, task.image_quality or "超清"),
     })
 
 
@@ -218,8 +242,8 @@ def create_generate_task(
         product_image_ids=dump_ids(product_image_ids),
         reference_image_ids=dump_ids(reference_image_ids),
         title=title,
-        subtitle=subtitle.strip(),
-        selling_points=selling_points.strip(),
+        subtitle=normalize_optional_text(subtitle),
+        selling_points=normalize_optional_text(selling_points),
         style=style,
         poster_type=poster_type,
         ratio=ratio,

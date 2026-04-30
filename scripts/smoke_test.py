@@ -46,6 +46,7 @@ def main():
         "image_quality",
         "image_file_field",
         "image_generation_action",
+        "prompt_common",
         "prompt_template_product",
         "prompt_template_xiaohongshu",
         "prompt_template_main_image",

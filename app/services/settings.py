@@ -1,3 +1,5 @@
+import json
+from pathlib import Path
 from textwrap import dedent
 
 from sqlalchemy.orm import Session
@@ -5,6 +7,18 @@ from sqlalchemy.orm import Session
 from app.config import read_default_model_config
 from app.models import Admin, SystemSetting
 from app.services.security import hash_password
+
+
+PROMPT_CONFIG_FILE = Path(__file__).resolve().parents[1] / "prompt_templates.json"
+
+
+def load_prompt_config() -> dict:
+    if not PROMPT_CONFIG_FILE.exists():
+        return {}
+    try:
+        return json.loads(PROMPT_CONFIG_FILE.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
 
 
 PROMPT_TEMPLATE_PRODUCT = dedent("""\
@@ -88,6 +102,15 @@ PROMPT_TEMPLATE_PROMOTION = dedent("""\
 请输出一张完成度高、适合正式活动宣传的海报画面，避免界面截图感、避免信息杂乱、避免低质量拼贴感。""")
 
 
+PROMPT_CONFIG = load_prompt_config()
+PROMPT_TEMPLATES = PROMPT_CONFIG.get("templates") or {}
+PROMPT_COMMON = PROMPT_CONFIG.get("common_prompt", "")
+PROMPT_TEMPLATE_PRODUCT = PROMPT_TEMPLATES.get("template_product_ad", PROMPT_TEMPLATE_PRODUCT)
+PROMPT_TEMPLATE_XIAOHONGSHU = PROMPT_TEMPLATES.get("template_xiaohongshu", PROMPT_TEMPLATE_XIAOHONGSHU)
+PROMPT_TEMPLATE_MAIN_IMAGE = PROMPT_TEMPLATES.get("template_infographic", PROMPT_TEMPLATE_MAIN_IMAGE)
+PROMPT_TEMPLATE_PROMOTION = PROMPT_TEMPLATES.get("template_promotion", PROMPT_TEMPLATE_PROMOTION)
+
+
 DEFAULT_SETTINGS = {
     "signup_points": "50",
     "generate_cost": "10",
@@ -106,6 +129,7 @@ DEFAULT_SETTINGS = {
     "image_quality": "",
     "image_file_field": "image",
     "image_generation_action": "",
+    "prompt_common": PROMPT_COMMON,
     "prompt_template_product": PROMPT_TEMPLATE_PRODUCT,
     "prompt_template_xiaohongshu": PROMPT_TEMPLATE_XIAOHONGSHU,
     "prompt_template_main_image": PROMPT_TEMPLATE_MAIN_IMAGE,
@@ -125,6 +149,7 @@ def init_defaults(db: Session) -> None:
     for key, value in defaults.items():
         if db.get(SystemSetting, key) is None:
             db.add(SystemSetting(key=key, value=str(value)))
+    db.flush()
     upgrade_legacy_model_defaults(db)
 
     admin = db.query(Admin).filter(Admin.username == "admin").first()
@@ -145,6 +170,20 @@ def upgrade_legacy_model_defaults(db: Session) -> None:
         setting = db.get(SystemSetting, key)
         if setting and setting.value in values:
             setting.value = values[setting.value]
+
+    prompt_defaults = {
+        "prompt_common": (PROMPT_COMMON, "请设计一张具有", "【空字段隐藏强规则】"),
+        "prompt_template_product": (PROMPT_TEMPLATE_PRODUCT, "请设计一张具有产品宣传质感", "【空字段版式规则】"),
+        "prompt_template_xiaohongshu": (PROMPT_TEMPLATE_XIAOHONGSHU, "请设计一张具有小红书种草质感", "【空字段版式规则】"),
+        "prompt_template_main_image": (PROMPT_TEMPLATE_MAIN_IMAGE, "请设计一张具有电商平台主图质感", "【空字段版式规则】"),
+        "prompt_template_promotion": (PROMPT_TEMPLATE_PROMOTION, "请设计一张具有活动促销氛围", "【空字段版式规则】"),
+    }
+    for key, (value, legacy_marker, required_marker) in prompt_defaults.items():
+        setting = db.get(SystemSetting, key)
+        if setting is None:
+            db.add(SystemSetting(key=key, value=value))
+        elif (legacy_marker and legacy_marker in setting.value) or (required_marker and required_marker not in setting.value):
+            setting.value = value
 
 
 def get_setting(db: Session, key: str, default: str = "") -> str:

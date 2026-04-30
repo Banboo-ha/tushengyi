@@ -72,6 +72,26 @@ textarea {
   line-height: 1.55;
 }
 
+.prompt-common textarea {
+  min-height: 340px;
+}
+
+.prompt-title {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 18px;
+}
+
+.prompt-title h2 {
+  margin-top: 0;
+}
+
+.prompt-title button {
+  flex: 0 0 auto;
+  margin-top: 2px;
+}
+
 .login {
   width: 380px;
   margin: 12vh auto;

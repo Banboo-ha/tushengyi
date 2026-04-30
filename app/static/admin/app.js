@@ -197,11 +197,12 @@ async function renderSettings() {
         <button class="secondary" onclick="testModel('responses_diagnostics')">Responses 分步诊断</button>
       </div>
 
-      <div class="wide section-title"><h2>海报提示词模板</h2><p>生成时会按类型套用模板。可用变量：{{title}}、{{subtitle}}、{{selling_points}}、{{product_reference}}、{{reference_materials}}、{{style_label}}、{{ratio}}、{{quality_label}}。</p></div>
-      ${textareaField("prompt_template_product", "产品宣传海报模板", s.prompt_template_product, "wide")}
-      ${textareaField("prompt_template_xiaohongshu", "小红书种草图模板", s.prompt_template_xiaohongshu, "wide")}
-      ${textareaField("prompt_template_main_image", "电商主图模板", s.prompt_template_main_image, "wide")}
-      ${textareaField("prompt_template_promotion", "活动促销海报模板", s.prompt_template_promotion, "wide")}
+      <div class="wide section-title prompt-title"><div><h2>提示词模板</h2><p>最终提示词按“通用模板 + 生成类型模板”拼接。变量：{{title}}、{{subtitle}}、{{selling_points}}、{{product_reference}}、{{reference_materials}}、{{style_label}}、{{ratio}}、{{quality_label}}。</p></div><button class="secondary" onclick="resetPromptTemplates()">恢复默认模板</button></div>
+      ${textareaField("prompt_common", "通用模板", s.prompt_common, "wide prompt-common")}
+      ${textareaField("prompt_template_product", "产品广告图模板 product_ad", s.prompt_template_product, "wide")}
+      ${textareaField("prompt_template_xiaohongshu", "小红书种草图模板 xiaohongshu", s.prompt_template_xiaohongshu, "wide")}
+      ${textareaField("prompt_template_main_image", "商品信息图模板 infographic", s.prompt_template_main_image, "wide")}
+      ${textareaField("prompt_template_promotion", "活动促销图模板 promotion", s.prompt_template_promotion, "wide")}
 
       <div class="field"><label>Mock 模式</label><select id="mock_mode"><option value="true" ${s.mock_mode === "true" ? "selected" : ""}>开启，H5 不调用真实图片接口</option><option value="false" ${s.mock_mode === "false" ? "selected" : ""}>关闭，H5 调用真实图片接口</option></select></div>
 
@@ -222,6 +223,19 @@ function textareaField(id, label, value, cls = "") {
   return `<div class="field ${cls}"><label>${label}</label><textarea id="${id}" rows="9">${escapeHtml(value)}</textarea></div>`;
 }
 
+async function resetPromptTemplates() {
+  if (!confirm("确认恢复默认提示词模板？当前编辑内容会被覆盖。")) return;
+  try {
+    const defaults = await request("/settings/prompt-reset", { method: "POST" });
+    prompt_common.value = defaults.prompt_common || "";
+    prompt_template_product.value = defaults.prompt_template_product || "";
+    prompt_template_xiaohongshu.value = defaults.prompt_template_xiaohongshu || "";
+    prompt_template_main_image.value = defaults.prompt_template_main_image || "";
+    prompt_template_promotion.value = defaults.prompt_template_promotion || "";
+    toast("已恢复默认模板");
+  } catch (e) { toast(e.message); }
+}
+
 async function saveSettings() {
   const payload = {
     model_base_url: model_base_url.value,
@@ -236,6 +250,7 @@ async function saveSettings() {
     image_response_format: image_response_format.value,
     image_quality: image_quality.value,
     image_generation_action: image_generation_action.value,
+    prompt_common: prompt_common.value,
     prompt_template_product: prompt_template_product.value,
     prompt_template_xiaohongshu: prompt_template_xiaohongshu.value,
     prompt_template_main_image: prompt_template_main_image.value,
