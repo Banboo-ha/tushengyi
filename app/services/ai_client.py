@@ -8,6 +8,7 @@ import textwrap
 import urllib.error
 import urllib.request
 import zlib
+from io import BytesIO
 from html import escape
 from pathlib import Path
 from typing import Optional
@@ -15,8 +16,16 @@ from typing import Optional
 from app.config import UPLOAD_DIR
 from app.services.ids import new_id
 
+try:
+    from PIL import Image, ImageOps
+except ImportError:  # Pillow is optional at import time; deployment installs it.
+    Image = None
+    ImageOps = None
+
 
 logger = logging.getLogger(__name__)
+RESPONSES_INPUT_MAX_SIDE = 1024
+RESPONSES_INPUT_JPEG_QUALITY = 86
 
 
 class AIImageClient:
@@ -223,11 +232,12 @@ class AIImageClient:
             except Exception as retry_exc:
                 preview = self._preview_responses_payload(payload)
                 compact_preview = self._preview_responses_payload(compact_payload)
+                image_inputs = self._preview_image_inputs(compact_preview)
                 raise RuntimeError(
                     "AI 接口失败：标准 Responses 图生图请求失败，兼容模式重试也失败。"
                     f"原始错误：{exc}；重试错误：{retry_exc}；"
                     f"请求摘要：prompt_len={len(prompt or '')}, image_count={len(image_paths)}, "
-                    f"standard_tool={preview.get('tools')}, compact_tool={compact_preview.get('tools')}"
+                    f"image_inputs={image_inputs}, standard_tool={preview.get('tools')}, compact_tool={compact_preview.get('tools')}"
                 ) from retry_exc
         return self._responses_result(result)
 
@@ -257,7 +267,7 @@ class AIImageClient:
     ) -> dict:
         content = [{"type": "input_text", "text": prompt}]
         for path in image_paths[:8]:
-            content.append({"type": "input_image", "image_url": self._data_url(path)})
+            content.append({"type": "input_image", "image_url": self._responses_input_data_url(path)})
         tool = {"type": "image_generation"}
         if include_output_options:
             tool["size"] = self._api_size(ratio)
@@ -309,6 +319,16 @@ class AIImageClient:
                     if isinstance(content, dict) and content.get("type") == "input_image":
                         content["image_url"] = f"<base64 data URL, {len(content['image_url'])} chars>"
         return preview
+
+    def _preview_image_inputs(self, preview: dict) -> list[str]:
+        inputs = []
+        input_items = preview.get("input", [])
+        if isinstance(input_items, list):
+            for input_item in input_items:
+                for content in input_item.get("content", []) if isinstance(input_item, dict) else []:
+                    if isinstance(content, dict) and content.get("type") == "input_image":
+                        inputs.append(content.get("image_url", ""))
+        return inputs
 
     def preview_image_request(self, prompt: str, ratio: str, image_paths: list[str]) -> dict:
         if self.api_type == "responses":
@@ -448,6 +468,31 @@ class AIImageClient:
         mime_type = mimetypes.guess_type(path)[0] or "application/octet-stream"
         data = base64.b64encode(Path(path).read_bytes()).decode("utf-8")
         return f"data:{mime_type};base64,{data}"
+
+    def _responses_input_data_url(self, path: str) -> str:
+        if Image is None or ImageOps is None:
+            return self._data_url(path)
+        source = Path(path)
+        try:
+            with Image.open(source) as image:
+                image = ImageOps.exif_transpose(image)
+                image.thumbnail((RESPONSES_INPUT_MAX_SIDE, RESPONSES_INPUT_MAX_SIDE))
+                if image.mode in {"RGBA", "LA"}:
+                    background = Image.new("RGB", image.size, (255, 255, 255))
+                    background.paste(image, mask=image.getchannel("A"))
+                    image = background
+                elif image.mode != "RGB":
+                    image = image.convert("RGB")
+                buffer = BytesIO()
+                image.save(buffer, format="JPEG", quality=RESPONSES_INPUT_JPEG_QUALITY, optimize=True)
+                raw = buffer.getvalue()
+            original_size = source.stat().st_size
+            if len(raw) < original_size:
+                logger.info("compressed responses input image: %s -> %s bytes", original_size, len(raw))
+                return f"data:image/jpeg;base64,{base64.b64encode(raw).decode('utf-8')}"
+        except Exception as exc:
+            logger.warning("failed to compress responses input image %s: %s", path, exc)
+        return self._data_url(path)
 
     def _test_reference_image(self) -> str:
         path = UPLOAD_DIR / "model-test-reference.png"
