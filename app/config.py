@@ -6,6 +6,11 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 DATA_DIR = Path(os.getenv("HAIBAO_DATA_DIR", str(BASE_DIR / "data")))
 UPLOAD_DIR = Path(os.getenv("HAIBAO_UPLOAD_DIR", str(BASE_DIR / "uploads")))
 PRD_APIKEY_FILE = BASE_DIR / "PRD" / "APIkey.md"
+DEFAULT_MODEL_BASE_URL = "https://api.huituke.top/v1"
+LEGACY_MODEL_BASE_URLS = {
+    "http://43.159.147.220:8080/v1": DEFAULT_MODEL_BASE_URL,
+    "https://43.159.147.220:8080/v1": DEFAULT_MODEL_BASE_URL,
+}
 
 DATABASE_URL = os.getenv("HAIBAO_DATABASE_URL", f"sqlite:///{DATA_DIR / 'app.db'}")
 SECRET_KEY = os.getenv("HAIBAO_SECRET_KEY", "change-this-secret-before-production")
@@ -27,7 +32,7 @@ def ensure_runtime_dirs() -> None:
 
 def read_default_model_config() -> dict:
     config = {
-        "model_base_url": "http://43.159.147.220:8080/v1",
+        "model_base_url": os.getenv("HAIBAO_MODEL_BASE_URL", DEFAULT_MODEL_BASE_URL),
         "model_api_key": "",
         "model_name": "gpt-5.5",
         "mock_mode": "true",
@@ -42,4 +47,5 @@ def read_default_model_config() -> dict:
             config["model_base_url"] = line.split(":", 1)[1].strip()
         if "API key" in line and ":" in line:
             config["model_api_key"] = line.split(":", 1)[1].strip()
+    config["model_base_url"] = LEGACY_MODEL_BASE_URLS.get(config["model_base_url"], config["model_base_url"])
     return config

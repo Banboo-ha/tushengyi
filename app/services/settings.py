@@ -4,7 +4,7 @@ from textwrap import dedent
 
 from sqlalchemy.orm import Session
 
-from app.config import read_default_model_config
+from app.config import LEGACY_MODEL_BASE_URLS, read_default_model_config
 from app.models import Admin, SystemSetting
 from app.services.security import hash_password
 
@@ -170,6 +170,11 @@ def upgrade_legacy_model_defaults(db: Session) -> None:
         setting = db.get(SystemSetting, key)
         if setting and setting.value in values:
             setting.value = values[setting.value]
+
+    for key in ("model_base_url", "chat_base_url", "image_base_url"):
+        setting = db.get(SystemSetting, key)
+        if setting and setting.value in LEGACY_MODEL_BASE_URLS:
+            setting.value = LEGACY_MODEL_BASE_URLS[setting.value]
 
     prompt_defaults = {
         "prompt_common": (PROMPT_COMMON, "请设计一张具有", "【空字段隐藏强规则】"),

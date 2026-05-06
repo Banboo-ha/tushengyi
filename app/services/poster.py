@@ -309,9 +309,10 @@ def process_task(task_id: str, allow_running: bool = False) -> bool:
         if not user:
             raise RuntimeError("用户不存在")
 
+        model_base_url = get_setting(db, "model_base_url") or get_setting(db, "image_base_url")
         mock_mode = get_setting(db, "mock_mode", "true").lower() in {"1", "true", "yes", "on"}
         client = AIImageClient(
-            base_url=get_setting(db, "model_base_url") or get_setting(db, "image_base_url"),
+            base_url=model_base_url,
             api_key=get_setting(db, "model_api_key") or get_setting(db, "image_api_key"),
             model=get_setting(db, "model_name", "gpt-5.5"),
             mock_mode=mock_mode,
@@ -323,6 +324,16 @@ def process_task(task_id: str, allow_running: bool = False) -> bool:
             generation_action=get_setting(db, "image_generation_action", ""),
         )
         image_paths = task_input_image_paths(db, task)
+        logger.info(
+            "processing poster task: id=%s type=%s endpoint=%s/responses mock=%s image_count=%s ratio=%s quality=%s",
+            task.id,
+            task.task_type,
+            model_base_url.rstrip("/") if model_base_url else "",
+            mock_mode,
+            len(image_paths),
+            task.ratio,
+            task.image_quality,
+        )
         image_url = client.generate_image(task.prompt, task.ratio, title=task.title or "AI 海报", image_paths=image_paths)
         task.result_image_url = image_url
         task.status = "success"

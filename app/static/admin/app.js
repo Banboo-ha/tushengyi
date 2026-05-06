@@ -79,11 +79,11 @@ function logout() {
 async function render() {
   if (!token()) return renderLogin();
   try {
-    if (page === "tasks") return renderTasks();
-    if (page === "works") return renderWorks();
-    if (page === "points") return renderPoints();
-    if (page === "settings") return renderSettings();
-    return renderUsers();
+    if (page === "tasks") return await renderTasks();
+    if (page === "works") return await renderWorks();
+    if (page === "points") return await renderPoints();
+    if (page === "settings") return await renderSettings();
+    return await renderUsers();
   } catch (e) {
     toast(e.message);
     if (String(e.message).includes("登录")) logout();
@@ -197,7 +197,7 @@ async function renderSettings() {
         <button class="secondary" onclick="testModel('responses_diagnostics')">Responses 分步诊断</button>
       </div>
 
-      <div class="wide section-title prompt-title"><div><h2>提示词模板</h2><p>最终提示词按“通用模板 + 生成类型模板”拼接。变量：{{title}}、{{subtitle}}、{{selling_points}}、{{product_reference}}、{{reference_materials}}、{{style_label}}、{{ratio}}、{{quality_label}}。</p></div><button class="secondary" onclick="resetPromptTemplates()">恢复默认模板</button></div>
+      <div class="wide section-title prompt-title"><div><h2>提示词模板</h2><p>最终提示词按“通用模板 + 生成类型模板”拼接。变量：&#123;&#123;title&#125;&#125;、&#123;&#123;subtitle&#125;&#125;、&#123;&#123;selling_points&#125;&#125;、&#123;&#123;product_reference&#125;&#125;、&#123;&#123;reference_materials&#125;&#125;、&#123;&#123;style_label&#125;&#125;、&#123;&#123;ratio&#125;&#125;、&#123;&#123;quality_label&#125;&#125;。</p></div><button class="secondary" onclick="resetPromptTemplates()">恢复默认模板</button></div>
       ${textareaField("prompt_common", "通用模板", s.prompt_common, "wide prompt-common")}
       ${textareaField("prompt_template_product", "产品广告图模板 product_ad", s.prompt_template_product, "wide")}
       ${textareaField("prompt_template_xiaohongshu", "小红书种草图模板 xiaohongshu", s.prompt_template_xiaohongshu, "wide")}
