@@ -86,8 +86,12 @@ async function request(path, options = {}) {
   return data;
 }
 
-function layout(content, nav = true) {
-  app.className = `app-shell route-${route}`;
+function isTabRoute(name = route) {
+  return ["home", "type", "mine"].includes(name);
+}
+
+function layout(content, nav = isTabRoute()) {
+  app.className = `app-shell route-${route} ${nav ? "has-nav" : "no-nav"}`;
   app.innerHTML = content + (nav ? bottomNav() : "");
 }
 
@@ -96,7 +100,20 @@ function topbar(title, right = "") {
 }
 
 function historyBack() {
-  const map = { type: "home", product: "type", reference: "product", copy: "reference", confirm: "copy", result: "home", edit: "result" };
+  const map = {
+    product: "type",
+    reference: "product",
+    copy: "reference",
+    confirm: "copy",
+    waiting: "confirm",
+    result: "home",
+    edit: "result",
+    plaza: "home",
+    works: "mine",
+    work: "works",
+    likes: "mine",
+    points: "mine",
+  };
   go(map[route] || "home");
 }
 
@@ -108,7 +125,7 @@ function progress(step, label) {
 }
 
 function bottomNav() {
-  const createActive = ["type","product","reference","copy","confirm","waiting","result","edit"].includes(route);
+  const createActive = route === "type";
   return `<nav class="nav">
     <button class="${route === "home" ? "active" : ""}" onclick="go('home')"><img class="nav-img" src="/h5-static/assets/ui_v1/common/${route === "home" ? "nav-home-active.svg" : "nav-home.svg"}" alt=""><span>首页</span></button>
     <button class="${createActive ? "active" : ""}" onclick="startFlow()"><img class="nav-img" src="/h5-static/assets/ui_v1/common/${createActive ? "nav-create-active.svg" : "nav-create.svg"}" alt=""><span>生成</span></button>
@@ -148,6 +165,7 @@ async function render() {
   if (route === "plaza") return renderPlaza();
   if (route === "works") return renderWorks();
   if (route === "work") return renderWorkDetail();
+  if (route === "likes") return renderLikedWorks();
   if (route === "points") return renderPoints();
   if (route === "mine") return renderMine();
   return renderHome();
@@ -155,15 +173,30 @@ async function render() {
 
 async function renderHome() {
   let points = "120";
+  let profile = null;
+  let featuredWorks = [];
   if (token()) {
-    try { points = (await request("/user/profile")).points_balance; } catch { localStorage.removeItem(tokenKey); }
+    try {
+      profile = await request("/user/profile");
+      points = profile.points_balance;
+    } catch {
+      localStorage.removeItem(tokenKey);
+    }
   }
+  try {
+    featuredWorks = (await request("/works/featured")).list || [];
+  } catch {
+    featuredWorks = [];
+  }
+  const homeWorksHtml = featuredWorks.length
+    ? featuredWorks.map(w => `<button class="home-work-card" onclick="go('plaza')"><img src="${asset(w.cover_url)}" alt="${escapeHtml(w.title || "热门作品")}"></button>`).join("")
+    : homeStyles.map(s => `<button class="home-work-card" onclick="go('plaza')"><img src="/h5-static/assets/ui_v1/home/${s[3]}" alt="${s[1]}"></button>`).join("");
   layout(`
     <div class="home-head">
       <div class="brand-row"><img class="home-brand-logo" src="/h5-static/assets/ui_v1/brand/logo_t.png" alt="图生意"></div>
       <div class="head-pills">
-        <button class="pill points-pill" onclick="needLogin(()=>go('points'))"><span>★</span>积分 ${points}</button>
-        <button class="pill muted-pill" onclick="toast('会员功能将在后续版本开放')"><span>♛</span>会员</button>
+        ${profile ? `<button class="pill points-pill" onclick="go('points')"><span>★</span>积分 ${points}</button>` : ""}
+        ${profile ? `<button class="home-user-chip" onclick="go('mine')"><span class="home-avatar">${escapeHtml((profile.username || "U").slice(0, 1).toUpperCase())}</span><b>${escapeHtml(profile.username || "用户")}</b></button>` : `<button class="home-user-chip guest" onclick="go('auth')"><span class="home-avatar">U</span><b>登录</b></button>`}
       </div>
     </div>
     <section class="home-hero">
@@ -178,7 +211,7 @@ async function renderHome() {
       ${homeFeatures.map(item => `<button class="feature card" onclick="pickPosterTypeFromHome('${item[0]}')"><img src="/h5-static/assets/ui_v1/home/${item[3]}" alt=""><b>${item[1]}</b><span>${item[2]}</span></button>`).join("")}
     </section>
     <div class="section-head home-section-head"><h2>热门作品</h2><button onclick="go('plaza')">作品广场 ›</button></div>
-    <section class="home-work-grid">${homeStyles.map(s => `<button class="home-work-card" onclick="go('plaza')"><img src="/h5-static/assets/ui_v1/home/${s[3]}" alt="${s[1]}"></button>`).join("")}</section>
+    <section class="home-work-grid">${homeWorksHtml}</section>
   `);
 }
 
@@ -232,7 +265,6 @@ async function auth(mode) {
 function renderType() {
   ensureAuthRoute();
   layout(`<section class="type-page">
-    <button class="type-back" onclick="historyBack()">‹</button>
     <header class="type-hero">
       <span class="type-spark type-spark-left">✦</span>
       <h1>选择你要生成的内容</h1>
@@ -250,7 +282,7 @@ function renderType() {
         <span class="type-arrow">›</span>
       </button>`).join("")}
     </section>
-  </section>`, false);
+  </section>`);
 }
 
 function pickPosterType(type) {
@@ -368,17 +400,15 @@ function renderCopy() {
   ensureAuthRoute();
   layout(`${topbar("填写文案")}${progress(3, "填写文案")}
     <section class="form-card card">
-      <div class="field"><label>主标题 <em>*</em></label><input id="title" maxlength="30" value="${draft.title || ""}" placeholder="例如：好水出好鱼"><small>0/30</small></div>
-      <div class="field"><label>副标题</label><input id="subtitle" maxlength="40" value="${draft.subtitle || ""}" placeholder="例如：来自密云水库的鲜活鱼"><small>0/40</small></div>
-      <div class="field"><label>卖点文案</label><textarea id="selling" maxlength="140" placeholder="输入 1-3 个核心卖点">${draft.selling_points || ""}</textarea><small>0/140</small></div>
+      <div class="field"><label>主标题</label><input id="title" maxlength="30" value="${draft.title || ""}" placeholder="可不填，例如：好水出好鱼"><small>可选 · 0/30</small></div>
+      <div class="field"><label>副标题</label><input id="subtitle" maxlength="40" value="${draft.subtitle || ""}" placeholder="可不填，例如：来自密云水库的鲜活鱼"><small>可选 · 0/40</small></div>
+      <div class="field"><label>卖点文案</label><textarea id="selling" maxlength="140" placeholder="可不填，AI 会根据产品图和模板自动发挥">${draft.selling_points || ""}</textarea><small>可选 · 0/140</small></div>
     </section>
     <div class="actions bottom-pair"><button class="ghost" onclick="go('reference')">上一步</button><button class="primary" onclick="saveCopy()">下一步</button></div>`);
 }
 
 function saveCopy() {
-  const normalizedTitle = normalizeText(title.value);
-  if (!normalizedTitle) return toast("请填写主标题");
-  draft.title = normalizedTitle;
+  draft.title = normalizeText(title.value);
   draft.subtitle = normalizeText(subtitle.value);
   draft.selling_points = normalizeText(selling.value);
   saveDraft();
@@ -426,9 +456,9 @@ function renderConfirm() {
     <section class="panel card summary-list">
       <div><span>生成类型</span><b>${posterTypes.find(t => t[0] === draft.posterType)?.[1] || "产品宣传海报"}</b></div>
       <div><span>风格</span><b>${style}</b></div>
-      <div><span>主标题</span><b>${draft.title || "-"}</b></div>
-      <div><span>副标题</span><b>${draft.subtitle || "-"}</b></div>
-      <div><span>卖点文案</span><b>${draft.selling_points || "-"}</b></div>
+      <div><span>主标题</span><b>${draft.title || "AI 自动发挥"}</b></div>
+      <div><span>副标题</span><b>${draft.subtitle || "AI 自动发挥"}</b></div>
+      <div><span>卖点文案</span><b>${draft.selling_points || "AI 自动发挥"}</b></div>
     </section>
     <section class="confirm-options card">
       <label><span>比例</span><select onchange="updateRatio(this.value)">${ratios.map(r => `<option value="${r}" ${ratio === r ? "selected" : ""}>${r}</option>`).join("")}</select></label>
@@ -470,7 +500,7 @@ function renderWaiting() {
     <p class="waiting-progress-label"><span id="waitPercent">0%</span></p>
     <h1>正在生成海报</h1>
     <p class="muted" id="waitText">正在分析产品图</p>
-    <p class="muted">可以关闭页面或切到后台，生成成功后会自动出现在作品库。</p>
+    <p class="muted">可以关闭页面或切到后台，生成成功会进入作品库；如接口超时会自动失败并退还积分。</p>
     <button class="secondary soft-secondary" onclick="go('works')">先去作品库</button>
   </section>`, false);
   startWaitingProgress();
@@ -509,7 +539,7 @@ async function pollTask(taskId) {
   const words = ["正在分析产品图", "正在理解宣传文案", "正在匹配海报风格", "正在生成海报", "正在优化画面细节"];
   let i = 0;
   const startedAt = Date.now();
-  const maxWaitMs = 180 * 1000;
+  const maxWaitMs = 270 * 1000;
   const textTimer = setInterval(() => {
     const el = document.querySelector("#waitText");
     if (el) el.textContent = words[++i % words.length];
@@ -534,11 +564,11 @@ async function pollTask(taskId) {
         clearInterval(timer); clearInterval(textTimer);
         clearWaitingProgress();
         draft.lastTaskError = {
-          message: "生成时间较长，已退出等待页。任务仍会在后台继续处理，完成后会出现在作品库；如果长时间没有结果，请联系管理员查看任务状态。",
+          message: "生成超时，请重新提交。若任务已扣积分，系统会自动退还。",
           task_id: task.task_id,
         };
         saveDraft();
-        toast("生成时间较长，已返回确认页");
+        toast("生成超时，已返回确认页");
         go("confirm");
       }
     } catch (e) {
@@ -622,10 +652,45 @@ async function renderPlaza() {
     const data = await request("/works/plaza");
     layout(`${topbar("作品广场")}
       <div class="plaza-title"><h1>热门作品</h1><p>看看大家正在生成的高质量营销图。</p></div>
-      ${data.list.length ? `<section class="masonry-grid">${data.list.map((w, index) => `<article class="plaza-card card" onclick="downloadImage('${asset(w.cover_url)}')">
-        <img src="${asset(w.cover_url)}" alt="">
-        <div><b>${w.title || "AI 营销海报"}</b><span>V${w.version_no || w.latest_version} · ${index % 3 === 0 ? "精选" : "热门"}</span></div>
+      ${data.list.length ? `<section class="masonry-grid">${data.list.map((w, index) => `<article class="plaza-card card">
+        <img src="${asset(w.cover_url)}" alt="" onclick="downloadImage('${asset(w.cover_url)}')">
+        <div class="plaza-meta"><b>${escapeHtml(w.title || "AI 营销海报")}</b><span>V${w.version_no || w.latest_version} · ${w.featured_order ? "精选" : (index % 3 === 0 ? "热门" : "灵感")}</span></div>
+        <button id="like_${w.version_id}" class="like-btn ${w.liked_by_me ? "liked" : ""}" onclick="likePlaza(event, '${w.version_id}')"><span>♥</span><b>${w.likes_count || 0}</b></button>
       </article>`).join("")}</section>` : `<section class="panel card" style="text-align:center"><h2>还没有公开作品</h2><p class="muted">生成成功的作品会自动进入作品库，后续可在这里展示。</p><button class="primary" onclick="startFlow()">立即生成</button></section>`}`);
+  } catch (e) { toast(e.message); }
+}
+
+async function renderLikedWorks() {
+  ensureAuthRoute();
+  try {
+    const data = await request("/works/liked");
+    layout(`${topbar("我的喜欢")}
+      <div class="plaza-title"><h1>我的喜欢</h1><p>这里保存你在作品广场点过赞的灵感图。</p></div>
+      ${data.list.length ? `<section class="masonry-grid">${data.list.map(w => `<article class="plaza-card card">
+        <img src="${asset(w.cover_url)}" alt="" onclick="downloadImage('${asset(w.cover_url)}')">
+        <div class="plaza-meta"><b>${escapeHtml(w.title || "AI 营销海报")}</b><span>V${w.version_no || w.latest_version} · 已喜欢</span></div>
+        <button id="like_${w.version_id}" class="like-btn liked" onclick="likePlaza(event, '${w.version_id}')"><span>♥</span><b>${w.likes_count || 0}</b></button>
+      </article>`).join("")}</section>` : `<section class="panel card" style="text-align:center"><h2>还没有喜欢的作品</h2><p class="muted">去作品广场给喜欢的海报点个赞，这里会自动收集。</p><button class="primary" onclick="go('plaza')">去作品广场</button></section>`}`);
+  } catch (e) { toast(e.message); }
+}
+
+async function likePlaza(event, versionId) {
+  event.stopPropagation();
+  if (!token()) {
+    draft.afterLogin = "plaza";
+    saveDraft();
+    go("auth");
+    return;
+  }
+  try {
+    const data = await request(`/works/versions/${versionId}/like`, { method: "POST" });
+    const button = document.querySelector(`#like_${versionId}`);
+    if (button) {
+      button.classList.toggle("liked", data.liked_by_me);
+      const count = button.querySelector("b");
+      if (count) count.textContent = data.likes_count;
+    }
+    toast(data.liked_by_me ? "已点赞" : "点赞成功");
   } catch (e) { toast(e.message); }
 }
 
@@ -644,10 +709,29 @@ async function renderWorkDetail() {
     draft.currentTask = { work_id: work.work_id, version_id: selected.version_id, result_image_url: selected.image_url };
     saveDraft();
     layout(`${topbar("作品详情")}
-      <img class="poster-preview" src="${asset(selected.image_url)}">
-      <section class="panel card"><b>${work.title}</b><p class="muted">当前查看 V${selected.version_no}，共 ${work.versions.length} 个版本</p>${work.versions.map(v => `<p>V${v.version_no} ${v.edit_instruction || "初次生成"}</p>`).join("")}</section>
-      <button class="secondary" onclick="go('edit')">继续修改</button>`);
+      <section class="result-frame">
+        <img class="poster-preview" src="${asset(selected.image_url)}" alt="作品海报">
+        <span class="version-chip">V${selected.version_no} 当前版本</span>
+      </section>
+      <div class="result-actions">
+        <button class="primary" onclick="downloadImage('${selected.image_url || ""}')">下载原图</button>
+        <button class="secondary" onclick="go('edit')">继续修改</button>
+      </div>
+      <section class="panel card work-version-panel">
+        <b>${work.title}</b>
+        <p class="muted">当前查看 V${selected.version_no}，共 ${work.versions.length} 个版本</p>
+        <button class="version-toggle" onclick="toggleVersionInfo()">展开版本信息</button>
+        <div class="version-list hidden" id="versionList">${work.versions.map(v => `<p>V${v.version_no} ${v.edit_instruction || "初次生成"}</p>`).join("")}</div>
+      </section>`);
   } catch (e) { toast(e.message); go("works"); }
+}
+
+function toggleVersionInfo() {
+  const list = document.querySelector("#versionList");
+  const button = document.querySelector(".version-toggle");
+  if (!list || !button) return;
+  const isHidden = list.classList.toggle("hidden");
+  button.textContent = isHidden ? "展开版本信息" : "收起版本信息";
 }
 
 async function renderPoints() {
@@ -664,23 +748,24 @@ async function renderPoints() {
 async function renderMine() {
   ensureAuthRoute();
   try {
-    const user = await request("/user/profile");
-    layout(`${topbar("我的", `<button class="icon-btn" onclick="logout()">⎋</button>`)}
+    const [user, liked] = await Promise.all([request("/user/profile"), request("/works/liked")]);
+    layout(`
       <section class="profile-card">
         <div class="avatar">${user.username.slice(0, 1).toUpperCase()}</div>
         <div><h1>${user.username}</h1><p>普通用户 · 当前积分 ${user.points_balance}</p></div>
-        <span class="member-tag">会员</span>
       </section>
       <section class="mine-stats">
         <button class="stat-card card" onclick="go('works')"><b>我的作品</b><span>查看全部版本</span></button>
-        <button class="stat-card card" onclick="go('points')"><b>${user.points_balance}</b><span>积分余额</span></button>
+        <button class="stat-card card" onclick="go('likes')"><b>我的喜欢</b><span>已喜欢 ${(liked.list || []).length} 个作品</span></button>
       </section>
       <section class="menu-card card">
         <button onclick="go('works')"><span>▣</span>作品库</button>
+        <button onclick="go('likes')"><span>♥</span>我的喜欢</button>
         <button onclick="go('points')"><span>◎</span>积分使用情况</button>
         <button onclick="toast('会员功能将在后续版本开放')"><span>◇</span>会员中心</button>
         <button onclick="toast('客服功能将在后续版本开放')"><span>?</span>联系客服</button>
-      </section>`);
+      </section>
+      <button class="logout-bottom" onclick="logout()">退出登录</button>`);
   } catch (e) { toast(e.message); }
 }
 
@@ -688,6 +773,14 @@ function logout() {
   localStorage.removeItem(tokenKey);
   toast("已退出登录");
   go("home");
+}
+
+function escapeHtml(value) {
+  return String(value || "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;");
 }
 
 function ensureAuthRoute() {

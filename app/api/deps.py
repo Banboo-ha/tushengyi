@@ -1,5 +1,6 @@
 from fastapi import Depends, HTTPException, Request
 from sqlalchemy.orm import Session
+from typing import Optional
 
 from app.db import get_db
 from app.models import Admin, User
@@ -16,10 +17,23 @@ def current_user(request: Request, db: Session = Depends(get_db)) -> User:
     return user
 
 
+def optional_user(request: Request, db: Session = Depends(get_db)) -> Optional[User]:
+    header = request.headers.get("authorization") or ""
+    if not header.lower().startswith("bearer "):
+        return None
+    try:
+        payload = decode_token(header.split(" ", 1)[1].strip(), expected_role="user")
+    except HTTPException:
+        return None
+    user = db.get(User, payload["sub"])
+    if not user or user.status != "normal":
+        return None
+    return user
+
+
 def current_admin(request: Request, db: Session = Depends(get_db)) -> Admin:
     payload = decode_token(bearer_token(request), expected_role="admin")
     admin = db.get(Admin, payload["sub"])
     if not admin or admin.status != "normal":
         raise HTTPException(status_code=401, detail="管理员登录已过期")
     return admin
-

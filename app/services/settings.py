@@ -115,6 +115,7 @@ DEFAULT_SETTINGS = {
     "signup_points": "50",
     "generate_cost": "10",
     "modify_cost": "8",
+    "task_timeout_seconds": "300",
     "mock_mode": "true",
     "chat_api_type": "responses",
     "chat_base_url": "",

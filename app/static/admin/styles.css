@@ -243,6 +243,52 @@ th {
   grid-column: 1 / -1;
 }
 
+.batch-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 18px;
+  margin-bottom: 18px;
+}
+
+.batch-toolbar h2 {
+  margin: 0 0 6px;
+}
+
+.batch-toolbar p {
+  margin: 0;
+  color: var(--muted);
+}
+
+.batch-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.batch-actions input {
+  width: 110px;
+}
+
+.version-line {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  padding: 6px 0;
+  color: var(--muted);
+  font-weight: 800;
+}
+
+.version-line span {
+  color: var(--ink);
+}
+
+.version-line b {
+  margin: 0;
+  color: var(--blue);
+  font-size: 13px;
+}
+
 .section-title {
   margin-top: 8px;
   padding-top: 10px;

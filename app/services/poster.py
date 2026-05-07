@@ -3,12 +3,12 @@ import logging
 import traceback
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Iterable
+from typing import Iterable, Optional
 
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
-from app.config import TASK_STALE_SECONDS, UPLOAD_DIR
+from app.config import TASK_STALE_SECONDS, TASK_TIMEOUT_SECONDS, UPLOAD_DIR
 from app.db import SessionLocal
 from app.models import PosterTask, PosterVersion, PosterWork, UploadedImage, User
 from app.services.ai_client import AIImageClient
@@ -136,6 +136,29 @@ def normalize_optional_text(value: str) -> str:
     return "" if text in EMPTY_TEXT_VALUES else text
 
 
+def copy_fallback_instruction(task: PosterTask) -> str:
+    title = normalize_optional_text(task.title)
+    subtitle = normalize_optional_text(task.subtitle)
+    selling_points = normalize_optional_text(task.selling_points)
+    missing = []
+    if not title:
+        missing.append("主标题")
+    if not subtitle:
+        missing.append("副标题")
+    if not selling_points:
+        missing.append("卖点文案")
+    if not missing:
+        return ""
+    if len(missing) == 3:
+        return """【文案可选与 AI 自发挥规则】
+用户没有填写主标题、副标题和卖点文案。请不要显示“无”“暂无”“N/A”“None”“null”“undefined”等占位文字。
+请根据海报类型、产品图、参考图、整体风格和营销场景，自行为画面创作合适的标题、副标题和必要卖点；也可以在更适合画面时只生成少量关键文案。
+生成的文案必须像真实商用海报文案，简洁、有销售力，并与产品和画面高度一致。"""
+    return f"""【文案可选与空字段处理规则】
+用户未填写：{"、".join(missing)}。这些字段都是可选项，不得显示“无”“暂无”“N/A”“None”“null”“undefined”等占位文字。
+对于用户已填写的文案，请保持语义准确；对于未填写的文案，可以完全隐藏对应模块，也可以根据海报类型和画面需要自行补充自然、真实、有销售力的商用文案。"""
+
+
 def build_generate_prompt(db: Session, task: PosterTask, product_images: list[UploadedImage], reference_images: list[UploadedImage]) -> str:
     poster_type = task.poster_type if task.poster_type in POSTER_TYPE_LABELS else "product"
     common_template = get_setting(db, "prompt_common", PROMPT_COMMON).strip() or PROMPT_COMMON
@@ -146,10 +169,10 @@ def build_generate_prompt(db: Session, task: PosterTask, product_images: list[Up
     ).strip() or PROMPT_TEMPLATE_DEFAULTS[poster_type]
     assembled_template = f"{common_template}\n\n{template}".strip()
     product_reference, reference_materials = reference_material_lines(product_images, reference_images)
-    return render_prompt_template(assembled_template, {
+    prompt = render_prompt_template(assembled_template, {
         "poster_type": poster_type,
         "poster_type_label": POSTER_TYPE_LABELS.get(poster_type, "产品广告海报"),
-        "title": task.title,
+        "title": normalize_optional_text(task.title),
         "subtitle": normalize_optional_text(task.subtitle),
         "selling_points": normalize_optional_text(task.selling_points),
         "product_count": str(len(product_images)),
@@ -162,6 +185,8 @@ def build_generate_prompt(db: Session, task: PosterTask, product_images: list[Up
         "quality_label": PROMPT_QUALITY_LABELS.get(task.image_quality, "commercial"),
         "quality_name": QUALITY_LABELS.get(task.image_quality, task.image_quality or "超清"),
     })
+    copy_instruction = copy_fallback_instruction(task)
+    return f"{prompt}\n\n{copy_instruction}".strip() if copy_instruction else prompt
 
 
 def build_modify_prompt(task: PosterTask) -> str:
@@ -219,9 +244,7 @@ def create_generate_task(
     ratio: str,
     image_quality: str = "medium",
 ) -> PosterTask:
-    title = title.strip()
-    if not title:
-        raise HTTPException(status_code=400, detail="请填写主标题")
+    title = normalize_optional_text(title)
     if style not in STYLE_LABELS:
         raise HTTPException(status_code=400, detail="请选择海报风格")
     if poster_type not in POSTER_TYPE_LABELS:
@@ -335,6 +358,10 @@ def process_task(task_id: str, allow_running: bool = False) -> bool:
             task.image_quality,
         )
         image_url = client.generate_image(task.prompt, task.ratio, title=task.title or "AI 海报", image_paths=image_paths)
+        db.refresh(task)
+        if task.status != "running":
+            logger.warning("poster task result ignored because status is %s: %s", task.status, task_id)
+            return False
         task.result_image_url = image_url
         task.status = "success"
 
@@ -346,7 +373,7 @@ def process_task(task_id: str, allow_running: bool = False) -> bool:
         else:
             work = PosterWork(
                 user_id=task.user_id,
-                title=task.title or "未命名海报",
+                title=task.title or "AI 营销海报",
                 cover_url=image_url,
                 latest_version=1,
                 is_saved=True,
@@ -374,16 +401,46 @@ def process_task(task_id: str, allow_running: bool = False) -> bool:
         db.rollback()
         task = db.get(PosterTask, task_id)
         if task:
-            user = db.get(User, task.user_id)
-            task.status = "failed"
-            task.error_message = str(exc) or traceback.format_exc(limit=1)
-            if user and task.points_cost > 0:
-                refund_points(db, user, task.points_cost, "失败退还", task.id)
-            db.commit()
+            fail_task_with_refund(db, task, str(exc) or traceback.format_exc(limit=1), "失败退还")
         logger.exception("poster task failed: %s", task_id)
         return False
     finally:
         db.close()
+
+
+def fail_task_with_refund(db: Session, task: PosterTask, message: str, scene: str = "失败退还") -> bool:
+    if task.status not in {"pending", "running"}:
+        return False
+    user = db.get(User, task.user_id)
+    task.status = "failed"
+    task.error_message = message
+    if user and task.points_cost > 0:
+        refund_points(db, user, task.points_cost, scene, task.id)
+    db.commit()
+    return True
+
+
+def fail_timed_out_tasks(db: Session, user_id: Optional[str] = None, task_id: Optional[str] = None) -> int:
+    timeout_seconds = get_int_setting(db, "task_timeout_seconds", TASK_TIMEOUT_SECONDS)
+    if timeout_seconds <= 0:
+        return 0
+    cutoff = datetime.utcnow() - timedelta(seconds=timeout_seconds)
+    query = db.query(PosterTask).filter(PosterTask.status.in_(["pending", "running"]))
+    if user_id:
+        query = query.filter(PosterTask.user_id == user_id)
+    if task_id:
+        query = query.filter(PosterTask.id == task_id)
+    tasks = query.all()
+    failed = 0
+    for task in tasks:
+        last_active_at = task.updated_at or task.created_at
+        if last_active_at and last_active_at > cutoff:
+            continue
+        duration = f"{timeout_seconds // 60} 分钟" if timeout_seconds >= 60 else f"{timeout_seconds} 秒"
+        message = f"生成超时：任务超过 {duration} 仍未完成，积分已自动退还，请重新生成。"
+        if fail_task_with_refund(db, task, message, "超时退还"):
+            failed += 1
+    return failed
 
 
 def reset_stale_running_tasks() -> int:
@@ -420,6 +477,11 @@ def pending_task_ids(limit: int = 1) -> list[str]:
 
 
 def process_next_tasks(limit: int = 1) -> int:
+    db = SessionLocal()
+    try:
+        fail_timed_out_tasks(db)
+    finally:
+        db.close()
     count = 0
     for task_id in pending_task_ids(limit=limit):
         if process_task(task_id):

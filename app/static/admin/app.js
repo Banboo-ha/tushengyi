@@ -138,9 +138,27 @@ async function renderTasks() {
 
 async function renderWorks() {
   const data = await request("/works");
+  const versions = data.list.flatMap(w => (w.versions || []).map(v => ({
+    ...v,
+    work_id: w.work_id,
+    title: w.title,
+    is_deleted: w.is_deleted,
+    is_saved: w.is_saved,
+  })));
   layout(`${pageHeader("作品管理", `<button onclick="renderWorks()">刷新</button>`)}
-    <section class="table-wrap"><table><thead><tr><th>作品</th><th>封面</th><th>版本</th><th>保存</th><th>删除</th><th>操作</th></tr></thead><tbody>
-      ${data.list.map(w => `<tr><td>${w.title}<br><small>${w.work_id}</small></td><td>${w.cover_url ? `<img class="thumb" src="${w.cover_url}">` : "-"}</td><td>V${w.latest_version}</td><td>${w.is_saved ? "是" : "否"}</td><td>${w.is_deleted ? "是" : "否"}</td><td><button class="danger" onclick="deleteWork('${w.work_id}')">软删除</button></td></tr>`).join("")}
+    <section class="card batch-toolbar">
+      <div>
+        <h2>批量运营</h2>
+        <p>首页热门作品会自动展示点赞数最高的 4 个真实图片作品。</p>
+      </div>
+      <div class="batch-actions">
+        <input id="batchLikeAmount" type="number" min="0" value="10" aria-label="批量增加点赞数">
+        <button class="secondary" onclick="batchAddLikes()">批量加赞</button>
+        <button class="danger" onclick="batchDeleteWorks()">批量删除作品</button>
+      </div>
+    </section>
+    <section class="table-wrap"><table><thead><tr><th><input type="checkbox" onchange="toggleAllWorks(this.checked)"></th><th>作品</th><th>封面</th><th>版本/点赞</th><th>保存</th><th>删除</th><th>操作</th></tr></thead><tbody>
+      ${data.list.map(w => `<tr><td><input class="work-check" type="checkbox" value="${w.work_id}"></td><td>${escapeHtml(w.title)}<br><small>${w.work_id}</small></td><td>${w.cover_url ? `<img class="thumb" src="${w.cover_url}">` : "-"}</td><td>${(w.versions || []).map(v => `<label class="version-line"><input class="version-check" type="checkbox" value="${v.version_id}"><span>V${v.version_no}</span><b>${v.likes_count || 0} 赞</b></label>`).join("")}</td><td>${w.is_saved ? "是" : "否"}</td><td>${w.is_deleted ? "是" : "否"}</td><td><button class="danger" onclick="deleteWork('${w.work_id}')">软删除</button></td></tr>`).join("")}
     </tbody></table></section>`);
 }
 
@@ -149,6 +167,36 @@ async function deleteWork(workId) {
   try {
     await request(`/works/${workId}/delete`, { method: "POST" });
     toast("已软删除");
+    renderWorks();
+  } catch (e) { toast(e.message); }
+}
+
+function selectedValues(selector) {
+  return [...document.querySelectorAll(selector)].filter(input => input.checked).map(input => input.value);
+}
+
+function toggleAllWorks(checked) {
+  document.querySelectorAll(".work-check").forEach(input => input.checked = checked);
+}
+
+async function batchAddLikes() {
+  const version_ids = selectedValues(".version-check");
+  const amount = Math.max(0, Number(batchLikeAmount.value || 0));
+  if (!version_ids.length) return toast("请选择要加赞的作品版本");
+  try {
+    await request("/works/versions/batch-likes", { method: "POST", body: JSON.stringify({ version_ids, amount }) });
+    toast("已批量加赞");
+    renderWorks();
+  } catch (e) { toast(e.message); }
+}
+
+async function batchDeleteWorks() {
+  const work_ids = selectedValues(".work-check");
+  if (!work_ids.length) return toast("请选择要删除的作品");
+  if (!confirm(`确认软删除 ${work_ids.length} 个作品？`)) return;
+  try {
+    await request("/works/batch-delete", { method: "POST", body: JSON.stringify({ work_ids }) });
+    toast("已批量删除");
     renderWorks();
   } catch (e) { toast(e.message); }
 }
@@ -210,6 +258,9 @@ async function renderSettings() {
       ${field("signup_points", "注册赠送积分", s.signup_points)}
       ${field("generate_cost", "生成消耗积分", s.generate_cost)}
       ${field("modify_cost", "修改消耗积分", s.modify_cost)}
+
+      <div class="wide section-title"><h2>任务处理</h2><p>生成任务超过该时间仍未完成时，会自动标记失败并退还积分。默认 300 秒，即 5 分钟。</p></div>
+      ${field("task_timeout_seconds", "生成任务超时（秒）", s.task_timeout_seconds || 300)}
       <div class="field wide"><button onclick="saveSettings()">保存设置</button></div>
     </section>`);
   renderSpecs(s.model_specs || []);
@@ -263,6 +314,7 @@ async function saveSettings() {
     signup_points: Number(signup_points.value),
     generate_cost: Number(generate_cost.value),
     modify_cost: Number(modify_cost.value),
+    task_timeout_seconds: Number(task_timeout_seconds.value),
   };
   try {
     await request("/settings", { method: "PUT", body: JSON.stringify(payload) });

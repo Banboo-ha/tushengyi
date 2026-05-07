@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 from app.api.deps import current_user
 from app.db import get_db
 from app.models import PosterTask, User
-from app.services.poster import create_generate_task, create_modify_task, process_task
+from app.services.poster import create_generate_task, create_modify_task, fail_timed_out_tasks, process_task
 
 router = APIRouter(prefix="/poster", tags=["h5-poster"])
 
@@ -13,7 +13,7 @@ router = APIRouter(prefix="/poster", tags=["h5-poster"])
 class GenerateRequest(BaseModel):
     product_image_ids: list[str]
     reference_image_ids: list[str] = []
-    title: str
+    title: str = ""
     subtitle: str = ""
     selling_points: str = ""
     style: str
@@ -80,6 +80,7 @@ def modify(
 
 @router.get("/task/{task_id}")
 def get_task(task_id: str, user: User = Depends(current_user), db: Session = Depends(get_db)):
+    fail_timed_out_tasks(db, user_id=user.id, task_id=task_id)
     task = db.get(PosterTask, task_id)
     if not task or task.user_id != user.id:
         raise HTTPException(status_code=404, detail="任务不存在")
@@ -92,6 +93,7 @@ def list_tasks(
     user: User = Depends(current_user),
     db: Session = Depends(get_db),
 ):
+    fail_timed_out_tasks(db, user_id=user.id)
     query = db.query(PosterTask).filter(PosterTask.user_id == user.id)
     if status == "active":
         query = query.filter(PosterTask.status.in_(["pending", "running"]))

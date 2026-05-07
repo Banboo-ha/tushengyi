@@ -45,6 +45,7 @@ class SettingsRequest(BaseModel):
     signup_points: int = 50
     generate_cost: int = 10
     modify_cost: int = 8
+    task_timeout_seconds: int = 300
 
 
 class TestModelRequest(BaseModel):

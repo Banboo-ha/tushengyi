@@ -20,6 +20,11 @@ def create_app() -> FastAPI:
                 conn.execute(text("ALTER TABLE poster_tasks ADD COLUMN image_quality VARCHAR(20) DEFAULT 'medium'"))
             if "poster_type" not in columns:
                 conn.execute(text("ALTER TABLE poster_tasks ADD COLUMN poster_type VARCHAR(40) DEFAULT 'product'"))
+            version_columns = {row[1] for row in conn.execute(text("PRAGMA table_info(poster_versions)"))}
+            if "likes_count" not in version_columns:
+                conn.execute(text("ALTER TABLE poster_versions ADD COLUMN likes_count INTEGER DEFAULT 0"))
+            if "featured_order" not in version_columns:
+                conn.execute(text("ALTER TABLE poster_versions ADD COLUMN featured_order INTEGER DEFAULT 0"))
     db = SessionLocal()
     try:
         init_defaults(db)

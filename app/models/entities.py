@@ -100,6 +100,19 @@ class PosterVersion(Base):
     version_no: Mapped[int] = mapped_column(Integer)
     image_url: Mapped[str] = mapped_column(String(512))
     edit_instruction: Mapped[str] = mapped_column(Text, default="")
+    likes_count: Mapped[int] = mapped_column(Integer, default=0)
+    featured_order: Mapped[int] = mapped_column(Integer, default=0, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=now)
+
+
+class PosterLike(Base):
+    __tablename__ = "poster_likes"
+    __table_args__ = (UniqueConstraint("user_id", "version_id", name="uq_user_version_like"),)
+
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=new_id)
+    user_id: Mapped[str] = mapped_column(String(32), index=True)
+    work_id: Mapped[str] = mapped_column(String(32), index=True)
+    version_id: Mapped[str] = mapped_column(String(32), index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=now)
 
 

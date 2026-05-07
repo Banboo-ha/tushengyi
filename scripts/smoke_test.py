@@ -1,13 +1,17 @@
 import io
 import sys
 import time
+from datetime import datetime, timedelta
 from pathlib import Path
 
 from fastapi.testclient import TestClient
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
+from app.db import SessionLocal
 from app.main import app
+from app.models import PosterTask, User
+from app.services.points import consume_points
 from app.services.poster import process_task
 
 
@@ -54,8 +58,16 @@ def main():
         "signup_points",
         "generate_cost",
         "modify_cost",
+        "task_timeout_seconds",
     ]}
-    mock_settings = {**settings_payload, "mock_mode": "true"}
+    mock_settings = {
+        **settings_payload,
+        "mock_mode": "true",
+        "signup_points": 50,
+        "generate_cost": 10,
+        "modify_cost": 8,
+        "task_timeout_seconds": 300,
+    }
     assert_ok(client.put("/api/admin/settings", headers=auth_headers(admin_token), json=mock_settings))
 
     username = f"smoke_{int(time.time())}"
@@ -63,6 +75,37 @@ def main():
         registered = assert_ok(client.post("/api/h5/auth/register", json={"username": username, "password": "123456"}))
         token = registered["token"]
         assert registered["points_balance"] == 50
+        stale_task_id = ""
+        db = SessionLocal()
+        try:
+            user = db.query(User).filter(User.username == username).one()
+            stale_task = PosterTask(
+                user_id=user.id,
+                task_type="generate",
+                status="running",
+                title="超时任务",
+                style="premium_commercial",
+                poster_type="product",
+                ratio="3:4",
+                image_quality="medium",
+                points_cost=8,
+                created_at=datetime.utcnow() - timedelta(minutes=10),
+                updated_at=datetime.utcnow() - timedelta(minutes=10),
+            )
+            db.add(stale_task)
+            db.flush()
+            stale_task_id = stale_task.id
+            consume_points(db, user, 8, "生成消耗", stale_task.id)
+            db.commit()
+        finally:
+            db.close()
+        active_after_timeout = assert_ok(client.get("/api/h5/poster/tasks?status=active", headers=auth_headers(token)))
+        assert all(item["task_id"] != stale_task_id for item in active_after_timeout["list"])
+        stale_payload = assert_ok(client.get(f"/api/h5/poster/task/{stale_task_id}", headers=auth_headers(token)))
+        assert stale_payload["status"] == "failed"
+        assert "超时" in stale_payload["error_message"]
+        profile_after_timeout = assert_ok(client.get("/api/h5/user/profile", headers=auth_headers(token)))
+        assert profile_after_timeout["points_balance"] == 50
 
         image = io.BytesIO(b"fake image bytes for smoke test")
         uploaded = assert_ok(
@@ -73,6 +116,26 @@ def main():
                 files={"file": ("product.png", image, "image/png")},
             )
         )
+        no_copy_task = assert_ok(
+            client.post(
+                "/api/h5/poster/generate",
+                headers=auth_headers(token),
+                json={
+                    "product_image_ids": [uploaded["image_id"]],
+                    "reference_image_ids": [],
+                    "title": "",
+                    "subtitle": "",
+                    "selling_points": "",
+                    "style": "premium_commercial",
+                    "poster_type": "product",
+                    "ratio": "3:4",
+                    "image_quality": "medium",
+                },
+            )
+        )
+        process_task(no_copy_task["task_id"])
+        no_copy_task = assert_ok(client.get(f"/api/h5/poster/task/{no_copy_task['task_id']}", headers=auth_headers(token)))
+        assert no_copy_task["status"] == "success"
 
         task = assert_ok(
             client.post(
@@ -120,8 +183,34 @@ def main():
         assert len(version_items) >= 2
         assert {item["version_no"] for item in version_items} >= {1, 2}
 
+        featured_ids = [item["version_id"] for item in version_items[:2]]
+        liked_target = featured_ids[0]
+        liked = assert_ok(
+            client.post(
+                "/api/admin/works/versions/batch-likes",
+                headers=auth_headers(admin_token),
+                json={"version_ids": [liked_target], "amount": 10000},
+            )
+        )
+        assert liked["updated"] == 1
+        refreshed_work = assert_ok(client.get(f"/api/h5/works/{task['work_id']}", headers=auth_headers(token)))
+        liked_version = next(item for item in refreshed_work["versions"] if item["version_id"] == liked_target)
+        assert liked_version["likes_count"] >= 10000
+        home_featured = assert_ok(client.get("/api/h5/works/featured", headers=auth_headers(token)))
+        assert all(not item["cover_url"].endswith(".svg") for item in home_featured["list"])
+        plaza = assert_ok(client.get("/api/h5/works/plaza", headers=auth_headers(token)))
+        assert all(not item["cover_url"].endswith(".svg") for item in plaza["list"])
+        like_once = assert_ok(client.post(f"/api/h5/works/versions/{liked_target}/like", headers=auth_headers(token)))
+        assert like_once["likes_count"] == liked_version["likes_count"] + 1
+        like_twice = assert_ok(client.post(f"/api/h5/works/versions/{liked_target}/like", headers=auth_headers(token)))
+        assert like_twice["likes_count"] == like_once["likes_count"]
+        my_likes = assert_ok(client.get("/api/h5/works/liked", headers=auth_headers(token)))
+        assert isinstance(my_likes["list"], list)
+        assert all(item["liked_by_me"] for item in my_likes["list"])
+
         users = assert_ok(client.get("/api/admin/users", headers=auth_headers(admin_token)))
         user_id = next(user["user_id"] for user in users["list"] if user["username"] == username)
+        before_topup = assert_ok(client.get("/api/h5/user/profile", headers=auth_headers(token)))["points_balance"]
         topped = assert_ok(
             client.post(
                 f"/api/admin/users/{user_id}/points",
@@ -129,7 +218,7 @@ def main():
                 json={"amount": 5, "reason": "smoke"},
             )
         )
-        assert topped["points_balance"] >= 37
+        assert topped["points_balance"] == before_topup + 5
         print("smoke ok")
     finally:
         assert_ok(client.put("/api/admin/settings", headers=auth_headers(admin_token), json=settings_payload))

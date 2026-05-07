@@ -1,6 +1,7 @@
 from app.models.entities import (
     Admin,
     PointsRecord,
+    PosterLike,
     PosterTask,
     PosterVersion,
     PosterWork,
@@ -12,6 +13,7 @@ from app.models.entities import (
 __all__ = [
     "Admin",
     "PointsRecord",
+    "PosterLike",
     "PosterTask",
     "PosterVersion",
     "PosterWork",
@@ -19,4 +21,3 @@ __all__ = [
     "UploadedImage",
     "User",
 ]
-
