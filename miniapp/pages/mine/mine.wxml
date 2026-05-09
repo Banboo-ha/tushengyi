@@ -1,0 +1,35 @@
+<view class="page mine-page">
+  <view class="profile card">
+    <view class="avatar">{{avatarText}}</view>
+    <view class="profile-main">
+      <view class="name">{{profile.username || '图生意用户'}}</view>
+      <view class="muted">一张好图，帮你多卖一点</view>
+    </view>
+  </view>
+
+  <view class="metrics">
+    <view class="metric card">
+      <view class="metric-value">{{profile.points_balance || 0}}</view>
+      <view class="metric-label">积分余额</view>
+    </view>
+    <view class="metric card" bindtap="goLikes">
+      <view class="metric-value">♥</view>
+      <view class="metric-label">我的喜欢</view>
+    </view>
+  </view>
+
+  <view class="menu card">
+    <view class="menu-row" bindtap="goWorks">
+      <text>我的作品</text>
+      <text class="arrow">›</text>
+    </view>
+    <view class="menu-row" bindtap="goRecharge">
+      <text>积分/会员充值</text>
+      <text class="arrow">›</text>
+    </view>
+    <view class="menu-row" bindtap="refresh">
+      <text>刷新资料</text>
+      <text class="arrow">↻</text>
+    </view>
+  </view>
+</view>

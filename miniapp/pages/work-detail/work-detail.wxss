@@ -1,0 +1,109 @@
+.detail-page {
+  padding-bottom: 42rpx;
+}
+
+.poster {
+  position: relative;
+  overflow: hidden;
+  padding: 14rpx;
+}
+
+.poster image {
+  display: block;
+  width: 100%;
+  border-radius: 22rpx;
+}
+
+.version-chip {
+  position: absolute;
+  top: 28rpx;
+  right: 28rpx;
+  padding: 8rpx 16rpx;
+  border-radius: 999rpx;
+  color: #fff;
+  font-size: 23rpx;
+  font-weight: 900;
+  background: rgba(23, 43, 99, .78);
+}
+
+.info {
+  padding: 26rpx;
+  margin-top: 20rpx;
+}
+
+.work-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 34rpx;
+  font-weight: 950;
+}
+
+.meta-line {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 14rpx;
+  color: #7d8bac;
+  font-size: 24rpx;
+}
+
+.actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 18rpx;
+  margin: 22rpx 0;
+}
+
+.actions.single {
+  grid-template-columns: 1fr;
+}
+
+.actions button {
+  height: 82rpx;
+  line-height: 82rpx;
+  font-size: 28rpx;
+}
+
+.edit {
+  padding: 24rpx;
+  margin-bottom: 20rpx;
+}
+
+.edit textarea {
+  width: 100%;
+  min-height: 150rpx;
+  padding: 20rpx;
+  box-sizing: border-box;
+  border-radius: 20rpx;
+  background: #f5f8ff;
+  font-size: 26rpx;
+}
+
+.submit {
+  margin-top: 18rpx;
+}
+
+.versions {
+  overflow: hidden;
+}
+
+.version-head,
+.version-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 24rpx 26rpx;
+  font-size: 27rpx;
+  font-weight: 800;
+  border-bottom: 1rpx solid #edf2ff;
+}
+
+.version-row {
+  color: #7d8bac;
+  font-size: 25rpx;
+}
+
+.version-row.active {
+  color: #2d7cff;
+  background: #f2f6ff;
+}

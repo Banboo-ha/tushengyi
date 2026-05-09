@@ -1,0 +1,17 @@
+<view class="page">
+  <view class="title">
+    <text>选择你要生成的内容</text>
+    <text>不同场景使用不同海报模板</text>
+  </view>
+  <view class="type-list">
+    <view class="type-card {{item.key}}" wx:for="{{types}}" wx:key="id" bindtap="choose" data-id="{{item.id}}">
+      <view class="type-copy">
+        <image class="icon" src="{{item.icon}}" mode="aspectFit"></image>
+        <text class="name">{{item.name}}</text>
+        <text class="desc">{{item.desc}}</text>
+      </view>
+      <image class="visual" src="{{item.visual}}" mode="heightFix"></image>
+      <text class="arrow">›</text>
+    </view>
+  </view>
+</view>

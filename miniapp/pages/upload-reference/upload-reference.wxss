@@ -1,0 +1,2 @@
+@import "../upload-product/upload-product.wxss";
+.actions { margin-top: 34rpx; display: grid; grid-template-columns: 1fr 1fr; gap: 18rpx; }

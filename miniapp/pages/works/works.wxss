@@ -1,0 +1,6 @@
+@import "../plaza/plaza.wxss";
+
+.start {
+  width: 220rpx;
+  margin-top: 28rpx;
+}

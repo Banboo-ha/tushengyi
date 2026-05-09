@@ -1,0 +1,17 @@
+<view class="page">
+  <view class="step">4/4 确认生成</view>
+  <view class="thumbs card">
+    <image wx:for="{{images}}" wx:key="image_id" src="{{item.url}}" mode="aspectFill"></image>
+  </view>
+  <view class="summary card">
+    <view><text>生成类型</text><text>{{posterTypeLabel}}</text></view>
+    <view><text>主标题</text><text>{{title || 'AI 自动发挥'}}</text></view>
+    <view><text>副标题</text><text>{{subtitle || 'AI 自动发挥'}}</text></view>
+    <view><text>卖点文案</text><text>{{selling_points || 'AI 自动发挥'}}</text></view>
+  </view>
+  <view class="summary card">
+    <view><text>比例</text><picker value="{{ratioIndex}}" range="{{ratios}}" bindchange="setRatio"><text>{{ratio}}</text></picker></view>
+    <view><text>质量</text><picker value="{{qualityIndex}}" range="{{qualityLabels}}" bindchange="setQuality"><text>{{qualityLabel}}</text></picker></view>
+  </view>
+  <view class="submit"><text>★ {{cost}} 积分</text><button class="primary" bindtap="create">确认生成</button></view>
+</view>

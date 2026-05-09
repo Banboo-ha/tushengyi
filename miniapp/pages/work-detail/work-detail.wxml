@@ -1,0 +1,43 @@
+<view class="page detail-page">
+  <view class="poster card">
+    <image src="{{imageUrl}}" mode="widthFix" bindtap="preview" />
+    <view class="version-chip">V{{current.version_no || 1}}</view>
+  </view>
+
+  <view class="info card">
+    <view class="work-title">{{title || '未命名作品'}}</view>
+    <view class="meta-line">
+      <text>{{authorName || '图生意用户'}}</text>
+      <text>♥ {{likesCount || 0}}</text>
+    </view>
+  </view>
+
+  <view class="actions {{canModify ? '' : 'single'}}">
+    <button class="primary" bindtap="saveImage">下载原图</button>
+    <button wx:if="{{canModify}}" class="secondary" bindtap="toggleEdit">继续修改</button>
+  </view>
+
+  <view wx:if="{{editing}}" class="edit card">
+    <textarea value="{{editInstruction}}" maxlength="300" placeholder="告诉 AI 你想如何调整画面" bindinput="onEditInput" />
+    <button class="primary submit" bindtap="submitModify">提交修改</button>
+  </view>
+
+  <view wx:if="{{versions.length > 1}}" class="versions card">
+    <view class="version-head" bindtap="toggleVersions">
+      <text>版本信息</text>
+      <text>{{showVersions ? '收起' : '展开'}}</text>
+    </view>
+    <view wx:if="{{showVersions}}">
+      <view
+        wx:for="{{versions}}"
+        wx:key="version_id"
+        class="version-row {{item.version_id === current.version_id ? 'active' : ''}}"
+        bindtap="selectVersion"
+        data-item="{{item}}"
+      >
+        <text>V{{item.version_no}}</text>
+        <text>{{item.created_at_text}}</text>
+      </view>
+    </view>
+  </view>
+</view>

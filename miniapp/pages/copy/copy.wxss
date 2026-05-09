@@ -1,0 +1,6 @@
+.step { margin: 16rpx 0 26rpx; text-align: center; color: #4560a5; font-weight: 900; }
+.form { padding: 28rpx; }
+.form text { display: block; margin: 18rpx 0 10rpx; font-weight: 900; }
+.form input, .form textarea { width: 100%; min-height: 78rpx; padding: 0 18rpx; border-radius: 20rpx; background: #f5f8ff; box-sizing: border-box; }
+.form textarea { min-height: 180rpx; padding-top: 18rpx; }
+.bottom { margin-top: 34rpx; }

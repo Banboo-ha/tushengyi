@@ -189,8 +189,13 @@ async function renderHome() {
     featuredWorks = [];
   }
   const homeWorksHtml = featuredWorks.length
-    ? featuredWorks.map(w => `<button class="home-work-card" onclick="go('plaza')"><img src="${asset(w.cover_url)}" alt="${escapeHtml(w.title || "热门作品")}"></button>`).join("")
-    : homeStyles.map(s => `<button class="home-work-card" onclick="go('plaza')"><img src="/h5-static/assets/ui_v1/home/${s[3]}" alt="${s[1]}"></button>`).join("");
+    ? featuredWorks.map(w => workFeedCard(w, { context: "home", clickAction: "go('plaza')" })).join("")
+    : homeStyles.map((s, index) => workFeedCard({
+        title: s[1],
+        cover_url: `/h5-static/assets/ui_v1/home/${s[3]}`,
+        author_name: "图生意官方",
+        likes_count: [126, 98, 83, 72][index] || 66,
+      }, { context: "home", clickAction: "go('plaza')" })).join("");
   layout(`
     <div class="home-head">
       <div class="brand-row"><img class="home-brand-logo" src="/h5-static/assets/ui_v1/brand/logo_t.png" alt="图生意"></div>
@@ -213,6 +218,26 @@ async function renderHome() {
     <div class="section-head home-section-head"><h2>热门作品</h2><button onclick="go('plaza')">作品广场 ›</button></div>
     <section class="home-work-grid">${homeWorksHtml}</section>
   `);
+}
+
+function workFeedCard(work, options = {}) {
+  const context = options.context || "plaza";
+  const clickAction = options.clickAction ? ` onclick="${options.clickAction}"` : "";
+  const versionId = work.version_id || "";
+  const title = escapeHtml(work.title || "AI 营销海报");
+  const author = escapeHtml(work.author_name || "图生意用户");
+  const cover = asset(work.cover_url || "");
+  const likes = Number(work.likes_count || 0);
+  const likeNode = versionId
+    ? `<button id="like_${versionId}" class="feed-like ${work.liked_by_me ? "liked" : ""}" onclick="likePlaza(event, '${versionId}')"><span>♥</span><b>${likes}</b></button>`
+    : `<span class="feed-like readonly"><span>♥</span><b>${likes}</b></span>`;
+  return `<article class="work-feed-card ${context === "home" ? "home-work-card" : "plaza-card"}"${clickAction}>
+    <img class="work-feed-image" src="${cover}" alt="${title}" loading="lazy" ${context === "plaza" ? `onclick="downloadImage('${cover}')"` : ""}>
+    <div class="work-feed-meta">
+      <b class="work-feed-title">${title}</b>
+      <div class="work-feed-sub"><span class="work-feed-author">${author}</span>${likeNode}</div>
+    </div>
+  </article>`;
 }
 
 function pickPosterTypeFromHome(type) {
@@ -652,11 +677,7 @@ async function renderPlaza() {
     const data = await request("/works/plaza");
     layout(`${topbar("作品广场")}
       <div class="plaza-title"><h1>热门作品</h1><p>看看大家正在生成的高质量营销图。</p></div>
-      ${data.list.length ? `<section class="masonry-grid">${data.list.map((w, index) => `<article class="plaza-card card">
-        <img src="${asset(w.cover_url)}" alt="" onclick="downloadImage('${asset(w.cover_url)}')">
-        <div class="plaza-meta"><b>${escapeHtml(w.title || "AI 营销海报")}</b><span>V${w.version_no || w.latest_version} · ${w.featured_order ? "精选" : (index % 3 === 0 ? "热门" : "灵感")}</span></div>
-        <button id="like_${w.version_id}" class="like-btn ${w.liked_by_me ? "liked" : ""}" onclick="likePlaza(event, '${w.version_id}')"><span>♥</span><b>${w.likes_count || 0}</b></button>
-      </article>`).join("")}</section>` : `<section class="panel card" style="text-align:center"><h2>还没有公开作品</h2><p class="muted">生成成功的作品会自动进入作品库，后续可在这里展示。</p><button class="primary" onclick="startFlow()">立即生成</button></section>`}`);
+      ${data.list.length ? `<section class="masonry-grid">${data.list.map(w => workFeedCard(w, { context: "plaza" })).join("")}</section>` : `<section class="panel card" style="text-align:center"><h2>还没有公开作品</h2><p class="muted">生成成功的作品会自动进入作品库，后续可在这里展示。</p><button class="primary" onclick="startFlow()">立即生成</button></section>`}`);
   } catch (e) { toast(e.message); }
 }
 
@@ -666,11 +687,7 @@ async function renderLikedWorks() {
     const data = await request("/works/liked");
     layout(`${topbar("我的喜欢")}
       <div class="plaza-title"><h1>我的喜欢</h1><p>这里保存你在作品广场点过赞的灵感图。</p></div>
-      ${data.list.length ? `<section class="masonry-grid">${data.list.map(w => `<article class="plaza-card card">
-        <img src="${asset(w.cover_url)}" alt="" onclick="downloadImage('${asset(w.cover_url)}')">
-        <div class="plaza-meta"><b>${escapeHtml(w.title || "AI 营销海报")}</b><span>V${w.version_no || w.latest_version} · 已喜欢</span></div>
-        <button id="like_${w.version_id}" class="like-btn liked" onclick="likePlaza(event, '${w.version_id}')"><span>♥</span><b>${w.likes_count || 0}</b></button>
-      </article>`).join("")}</section>` : `<section class="panel card" style="text-align:center"><h2>还没有喜欢的作品</h2><p class="muted">去作品广场给喜欢的海报点个赞，这里会自动收集。</p><button class="primary" onclick="go('plaza')">去作品广场</button></section>`}`);
+      ${data.list.length ? `<section class="masonry-grid">${data.list.map(w => workFeedCard(w, { context: "plaza" })).join("")}</section>` : `<section class="panel card" style="text-align:center"><h2>还没有喜欢的作品</h2><p class="muted">去作品广场给喜欢的海报点个赞，这里会自动收集。</p><button class="primary" onclick="go('plaza')">去作品广场</button></section>`}`);
   } catch (e) { toast(e.message); }
 }
 

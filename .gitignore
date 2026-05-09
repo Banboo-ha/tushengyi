@@ -8,3 +8,12 @@ uploads/*
 .env
 *.env
 PRD/
+miniapp/project.private.config.json
+miniapp/assets/ui_v1/**/README.md
+miniapp/assets/ui_v1/common/nav-*.svg
+miniapp/assets/ui_v1/home/ChatGPT Image*.png
+miniapp/assets/ui_v1/home/产品海报icon.png
+miniapp/assets/ui_v1/home/小红书icon.png
+miniapp/assets/ui_v1/home/电商主图icon.png
+miniapp/assets/ui_v1/home/活动促销icon.png
+miniapp/assets/ui_v1/home/首页底图.png

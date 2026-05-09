@@ -15,13 +15,19 @@ def is_real_image_url(image_url: str) -> bool:
     return url.endswith((".jpg", ".jpeg", ".png", ".webp"))
 
 
-def plaza_item(version: PosterVersion, work: PosterWork, liked_version_ids: Optional[set[str]] = None) -> dict:
+def plaza_item(
+    version: PosterVersion,
+    work: PosterWork,
+    liked_version_ids: Optional[set[str]] = None,
+    author_name: str = "",
+) -> dict:
     liked_version_ids = liked_version_ids or set()
     return {
         "work_id": work.id,
         "version_id": version.id,
         "version_no": version.version_no,
         "title": work.title,
+        "author_name": author_name or "图生意用户",
         "cover_url": version.image_url,
         "latest_version": work.latest_version,
         "likes_count": version.likes_count or 0,
@@ -100,31 +106,33 @@ def plaza_works(
     db: Session = Depends(get_db),
 ):
     rows = (
-        db.query(PosterVersion, PosterWork)
+        db.query(PosterVersion, PosterWork, User)
         .join(PosterWork, PosterVersion.work_id == PosterWork.id)
+        .join(User, PosterWork.user_id == User.id)
         .filter(PosterWork.is_saved.is_(True), PosterWork.is_deleted.is_(False))
         .order_by(PosterVersion.likes_count.desc(), PosterVersion.created_at.desc())
         .limit(limit * 3)
         .all()
     )
-    rows = [(version, work) for version, work in rows if is_real_image_url(version.image_url)][:limit]
-    liked_version_ids = liked_versions(db, user.id, [version.id for version, _ in rows]) if user else set()
-    return {"list": [plaza_item(version, work, liked_version_ids) for version, work in rows]}
+    rows = [(version, work, author) for version, work, author in rows if is_real_image_url(version.image_url)][:limit]
+    liked_version_ids = liked_versions(db, user.id, [version.id for version, _, _ in rows]) if user else set()
+    return {"list": [plaza_item(version, work, liked_version_ids, author.username) for version, work, author in rows]}
 
 
 @router.get("/featured")
 def featured_works(user: Optional[User] = Depends(optional_user), db: Session = Depends(get_db)):
     rows = (
-        db.query(PosterVersion, PosterWork)
+        db.query(PosterVersion, PosterWork, User)
         .join(PosterWork, PosterVersion.work_id == PosterWork.id)
+        .join(User, PosterWork.user_id == User.id)
         .filter(PosterWork.is_saved.is_(True), PosterWork.is_deleted.is_(False))
         .order_by(PosterVersion.likes_count.desc(), PosterVersion.created_at.desc())
         .limit(24)
         .all()
     )
-    rows = [(version, work) for version, work in rows if is_real_image_url(version.image_url)][:4]
-    liked_version_ids = liked_versions(db, user.id, [version.id for version, _ in rows]) if user else set()
-    return {"list": [plaza_item(version, work, liked_version_ids) for version, work in rows[:4]]}
+    rows = [(version, work, author) for version, work, author in rows if is_real_image_url(version.image_url)][:4]
+    liked_version_ids = liked_versions(db, user.id, [version.id for version, _, _ in rows]) if user else set()
+    return {"list": [plaza_item(version, work, liked_version_ids, author.username) for version, work, author in rows[:4]]}
 
 
 @router.get("/liked")
@@ -134,9 +142,10 @@ def liked_works(
     db: Session = Depends(get_db),
 ):
     rows = (
-        db.query(PosterLike, PosterVersion, PosterWork)
+        db.query(PosterLike, PosterVersion, PosterWork, User)
         .join(PosterVersion, PosterLike.version_id == PosterVersion.id)
         .join(PosterWork, PosterLike.work_id == PosterWork.id)
+        .join(User, PosterWork.user_id == User.id)
         .filter(
             PosterLike.user_id == user.id,
             PosterWork.is_saved.is_(True),
@@ -146,9 +155,9 @@ def liked_works(
         .limit(limit * 3)
         .all()
     )
-    rows = [(version, work) for _, version, work in rows if is_real_image_url(version.image_url)][:limit]
-    liked_version_ids = {version.id for version, _ in rows}
-    return {"list": [plaza_item(version, work, liked_version_ids) for version, work in rows]}
+    rows = [(version, work, author) for _, version, work, author in rows if is_real_image_url(version.image_url)][:limit]
+    liked_version_ids = {version.id for version, _, _ in rows}
+    return {"list": [plaza_item(version, work, liked_version_ids, author.username) for version, work, author in rows]}
 
 
 def liked_versions(db: Session, user_id: str, version_ids: list[str]) -> set[str]:
@@ -186,6 +195,30 @@ def like_version(version_id: str, user: User = Depends(current_user), db: Sessio
         "likes_count": version.likes_count or 0,
         "liked_by_me": True,
     }
+
+
+@router.get("/public/{version_id}")
+def get_public_work_version(
+    version_id: str,
+    user: Optional[User] = Depends(optional_user),
+    db: Session = Depends(get_db),
+):
+    row = (
+        db.query(PosterVersion, PosterWork, User)
+        .join(PosterWork, PosterVersion.work_id == PosterWork.id)
+        .join(User, PosterWork.user_id == User.id)
+        .filter(
+            PosterVersion.id == version_id,
+            PosterWork.is_saved.is_(True),
+            PosterWork.is_deleted.is_(False),
+        )
+        .first()
+    )
+    if not row:
+        raise HTTPException(status_code=404, detail="作品不存在")
+    version, work, author = row
+    liked_version_ids = liked_versions(db, user.id, [version.id]) if user else set()
+    return plaza_item(version, work, liked_version_ids, author.username)
 
 
 @router.get("/{work_id}")

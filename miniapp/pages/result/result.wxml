@@ -1,0 +1,7 @@
+<view class="page">
+  <text class="title">生成完成</text>
+  <text class="muted">作品已自动保存到作品库</text>
+  <image class="poster card" src="{{imageUrl}}" mode="widthFix" bindtap="preview"></image>
+  <view class="actions"><button class="primary" bindtap="save">保存原图</button><button class="secondary" bindtap="edit">继续修改</button></view>
+  <view class="links"><text bindtap="regenerate">重新生成</text><text bindtap="goWorks">作品库</text></view>
+</view>

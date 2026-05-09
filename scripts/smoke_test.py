@@ -59,6 +59,16 @@ def main():
         "generate_cost",
         "modify_cost",
         "task_timeout_seconds",
+        "wechat_appid",
+        "wechat_app_secret",
+        "wechat_login_mock_mode",
+        "wechat_pay_mock_mode",
+        "wechat_pay_mch_id",
+        "wechat_pay_api_v3_key",
+        "wechat_pay_cert_serial_no",
+        "wechat_pay_private_key_path",
+        "wechat_pay_notify_url",
+        "wechat_pay_packages",
     ]}
     mock_settings = {
         **settings_payload,
@@ -67,6 +77,8 @@ def main():
         "generate_cost": 10,
         "modify_cost": 8,
         "task_timeout_seconds": 300,
+        "wechat_login_mock_mode": "true",
+        "wechat_pay_mock_mode": "true",
     }
     assert_ok(client.put("/api/admin/settings", headers=auth_headers(admin_token), json=mock_settings))
 
@@ -207,6 +219,8 @@ def main():
         my_likes = assert_ok(client.get("/api/h5/works/liked", headers=auth_headers(token)))
         assert isinstance(my_likes["list"], list)
         assert all(item["liked_by_me"] for item in my_likes["list"])
+        public_detail = assert_ok(client.get(f"/api/h5/works/public/{liked_target}", headers=auth_headers(token)))
+        assert public_detail["version_id"] == liked_target
 
         users = assert_ok(client.get("/api/admin/users", headers=auth_headers(admin_token)))
         user_id = next(user["user_id"] for user in users["list"] if user["username"] == username)
@@ -219,6 +233,35 @@ def main():
             )
         )
         assert topped["points_balance"] == before_topup + 5
+
+        mp_login = assert_ok(client.post("/api/mp/auth/login", json={"code": f"smoke_mp_{int(time.time())}"}))
+        mp_token = mp_login["token"]
+        mp_profile = assert_ok(client.get("/api/mp/user/profile", headers=auth_headers(mp_token)))
+        assert mp_profile["points_balance"] == 50
+        packages = assert_ok(client.get("/api/mp/pay/packages"))
+        assert packages["list"]
+        order = assert_ok(
+            client.post(
+                "/api/mp/pay/orders",
+                headers=auth_headers(mp_token),
+                json={"package_id": packages["list"][0]["id"]},
+            )
+        )
+        assert order["status"] == "unpaid"
+        assert order["payment_available"] is False
+        notify = assert_ok(
+            client.post(
+                "/api/mp/pay/notify/wechat",
+                json={"order_no": order["order_no"], "transaction_id": "smoke_tx"},
+            )
+        )
+        assert notify["code"] == "SUCCESS"
+        paid_order = assert_ok(client.get(f"/api/mp/pay/orders/{order['order_id']}", headers=auth_headers(mp_token)))
+        assert paid_order["status"] == "paid"
+        mp_profile_after = assert_ok(client.get("/api/mp/user/profile", headers=auth_headers(mp_token)))
+        assert mp_profile_after["points_balance"] == mp_profile["points_balance"] + order["points"]
+        admin_orders = assert_ok(client.get("/api/admin/orders", headers=auth_headers(admin_token)))
+        assert any(item["order_no"] == order["order_no"] for item in admin_orders["list"])
         print("smoke ok")
     finally:
         assert_ok(client.put("/api/admin/settings", headers=auth_headers(admin_token), json=settings_payload))

@@ -1,0 +1,20 @@
+<view class="page recharge-page">
+  <view class="hero card">
+    <text class="eyebrow">Points</text>
+    <view class="title">积分 / 会员充值</view>
+    <view class="muted">微信支付配置完成后可直接在小程序内购买积分。</view>
+  </view>
+
+  <view wx:for="{{packages}}" wx:key="id" class="package card">
+    <view>
+      <view class="package-title">{{item.title}}</view>
+      <view class="muted">{{item.points}} 积分</view>
+    </view>
+    <view class="package-side">
+      <view class="price">¥{{item.price}}</view>
+      <button class="primary buy" bindtap="buy" data-id="{{item.id}}">购买</button>
+    </view>
+  </view>
+
+  <view wx:if="{{!packages.length}}" class="empty card">暂无可购买套餐</view>
+</view>

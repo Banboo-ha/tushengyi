@@ -1,0 +1,10 @@
+.step { margin: 16rpx 0 24rpx; text-align: center; color: #4560a5; font-weight: 900; }
+.thumbs { padding: 16rpx; display: grid; grid-template-columns: repeat(4, 1fr); gap: 12rpx; }
+.thumbs image { width: 100%; height: 116rpx; border-radius: 16rpx; background: #eef5ff; }
+.summary { margin-top: 18rpx; padding: 22rpx 26rpx; }
+.summary view { min-height: 56rpx; display: flex; align-items: center; justify-content: space-between; gap: 20rpx; border-bottom: 1rpx solid #e4eaf8; }
+.summary view:last-child { border-bottom: 0; }
+.summary text:first-child { color: #7d8bac; }
+.summary text:last-child { max-width: 440rpx; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 800; }
+.submit { margin-top: 24rpx; display: grid; grid-template-columns: 180rpx 1fr; align-items: center; gap: 18rpx; }
+.submit text { color: #cc7c00; font-weight: 900; }

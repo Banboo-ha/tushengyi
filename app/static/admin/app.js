@@ -39,7 +39,7 @@ function layout(content) {
   app.innerHTML = `<div class="shell">
     <aside class="side">
       <div class="brand">海报快生 Admin</div>
-      ${["users:用户管理", "tasks:生成任务", "works:作品管理", "points:积分流水", "settings:系统设置"].map(item => {
+      ${["users:用户管理", "tasks:生成任务", "works:作品管理", "orders:充值订单", "points:积分流水", "settings:系统设置"].map(item => {
         const [key, label] = item.split(":");
         return `<button class="${page === key ? "active" : ""}" onclick="go('${key}')">${label}</button>`;
       }).join("")}
@@ -81,6 +81,7 @@ async function render() {
   try {
     if (page === "tasks") return await renderTasks();
     if (page === "works") return await renderWorks();
+    if (page === "orders") return await renderOrders();
     if (page === "points") return await renderPoints();
     if (page === "settings") return await renderSettings();
     return await renderUsers();
@@ -209,6 +210,20 @@ async function renderPoints() {
     </tbody></table></section>`);
 }
 
+async function renderOrders() {
+  const data = await request("/orders");
+  layout(`${pageHeader("充值订单", `<button onclick="renderOrders()">刷新</button>`)}
+    <section class="cards">
+      <div class="card"><span>订单数</span><b>${data.list.length}</b></div>
+      <div class="card"><span>已支付</span><b>${data.list.filter(o => o.status === "paid").length}</b></div>
+      <div class="card"><span>待支付</span><b>${data.list.filter(o => o.status === "unpaid").length}</b></div>
+      <div class="card"><span>到账积分</span><b>${data.list.filter(o => o.status === "paid").reduce((n, o) => n + o.points, 0)}</b></div>
+    </section>
+    <section class="table-wrap"><table><thead><tr><th>订单</th><th>用户</th><th>套餐</th><th>金额</th><th>积分</th><th>状态</th><th>支付流水</th><th>时间</th></tr></thead><tbody>
+      ${data.list.map(o => `<tr><td>${o.order_no}<br><small>${o.order_id}</small></td><td>${o.username}<br><small>${o.user_id}</small></td><td>${o.title}</td><td>¥${(o.amount_cents / 100).toFixed(2)}</td><td>${o.points}</td><td><span class="status">${o.status}</span></td><td>${o.transaction_id || "-"}</td><td>${format(o.created_at)}${o.paid_at ? `<br><small>支付 ${format(o.paid_at)}</small>` : ""}</td></tr>`).join("")}
+    </tbody></table></section>`);
+}
+
 async function renderSettings() {
   const s = await request("/settings");
   layout(`${pageHeader("系统设置")}
@@ -261,6 +276,18 @@ async function renderSettings() {
 
       <div class="wide section-title"><h2>任务处理</h2><p>生成任务超过该时间仍未完成时，会自动标记失败并退还积分。默认 300 秒，即 5 分钟。</p></div>
       ${field("task_timeout_seconds", "生成任务超时（秒）", s.task_timeout_seconds || 300)}
+
+      <div class="wide section-title"><h2>微信小程序</h2><p>用于小程序静默登录和微信支付。商户号未就绪时保持支付 Mock 开启，小程序会显示支付能力配置中。</p></div>
+      ${field("wechat_appid", "小程序 AppID", s.wechat_appid)}
+      ${field("wechat_app_secret", "小程序 AppSecret", s.wechat_app_secret, "", "password")}
+      <div class="field"><label>微信登录 Mock</label><select id="wechat_login_mock_mode"><option value="true" ${s.wechat_login_mock_mode === "true" ? "selected" : ""}>开启，开发工具可用任意 code</option><option value="false" ${s.wechat_login_mock_mode === "false" ? "selected" : ""}>关闭，调用微信 jscode2session</option></select></div>
+      <div class="field"><label>微信支付 Mock</label><select id="wechat_pay_mock_mode"><option value="true" ${s.wechat_pay_mock_mode === "true" ? "selected" : ""}>开启，暂不调起真实支付</option><option value="false" ${s.wechat_pay_mock_mode === "false" ? "selected" : ""}>关闭，预留真实支付配置</option></select></div>
+      ${field("wechat_pay_mch_id", "微信支付商户号", s.wechat_pay_mch_id)}
+      ${field("wechat_pay_api_v3_key", "微信支付 API v3 Key", s.wechat_pay_api_v3_key, "", "password")}
+      ${field("wechat_pay_cert_serial_no", "商户证书序列号", s.wechat_pay_cert_serial_no)}
+      ${field("wechat_pay_private_key_path", "商户私钥路径", s.wechat_pay_private_key_path, "wide")}
+      ${field("wechat_pay_notify_url", "支付回调地址", s.wechat_pay_notify_url, "wide")}
+      ${textareaField("wechat_pay_packages", "积分套餐 JSON", s.wechat_pay_packages, "wide")}
       <div class="field wide"><button onclick="saveSettings()">保存设置</button></div>
     </section>`);
   renderSpecs(s.model_specs || []);
@@ -315,6 +342,16 @@ async function saveSettings() {
     generate_cost: Number(generate_cost.value),
     modify_cost: Number(modify_cost.value),
     task_timeout_seconds: Number(task_timeout_seconds.value),
+    wechat_appid: wechat_appid.value,
+    wechat_app_secret: wechat_app_secret.value,
+    wechat_login_mock_mode: wechat_login_mock_mode.value,
+    wechat_pay_mock_mode: wechat_pay_mock_mode.value,
+    wechat_pay_mch_id: wechat_pay_mch_id.value,
+    wechat_pay_api_v3_key: wechat_pay_api_v3_key.value,
+    wechat_pay_cert_serial_no: wechat_pay_cert_serial_no.value,
+    wechat_pay_private_key_path: wechat_pay_private_key_path.value,
+    wechat_pay_notify_url: wechat_pay_notify_url.value,
+    wechat_pay_packages: wechat_pay_packages.value,
   };
   try {
     await request("/settings", { method: "PUT", body: JSON.stringify(payload) });

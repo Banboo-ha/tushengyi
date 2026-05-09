@@ -1,0 +1,18 @@
+<view class="page">
+  <view class="step">1/4 上传产品图</view>
+  <view class="guide card">
+    <image src="/assets/ui_v1/common/icon_01_product_bag.png" mode="aspectFit"></image>
+    <view>
+      <text>上传 1-4 张清晰产品图</text>
+      <text>建议主体完整、背景干净，生成效果更稳定。</text>
+    </view>
+  </view>
+  <view class="upload-grid">
+    <view class="slot" wx:for="{{images}}" wx:key="image_id">
+      <image src="{{item.url}}" mode="aspectFill"></image>
+      <text catchtap="remove" data-index="{{index}}">×</text>
+    </view>
+    <view class="slot add" wx:if="{{images.length < 4}}" bindtap="choose"><text>＋</text><text>上传产品图</text></view>
+  </view>
+  <button class="primary bottom" bindtap="next">下一步</button>
+</view>

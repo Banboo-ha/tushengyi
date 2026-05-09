@@ -5,6 +5,7 @@ from sqlalchemy import text
 
 from app.api.admin.router import router as admin_router
 from app.api.h5.router import router as h5_router
+from app.api.mp.router import router as mp_router
 from app.config import BASE_DIR, UPLOAD_DIR, ensure_runtime_dirs
 from app.db import Base, SessionLocal, engine
 from app.services.settings import init_defaults
@@ -20,6 +21,13 @@ def create_app() -> FastAPI:
                 conn.execute(text("ALTER TABLE poster_tasks ADD COLUMN image_quality VARCHAR(20) DEFAULT 'medium'"))
             if "poster_type" not in columns:
                 conn.execute(text("ALTER TABLE poster_tasks ADD COLUMN poster_type VARCHAR(40) DEFAULT 'product'"))
+            user_columns = {row[1] for row in conn.execute(text("PRAGMA table_info(users)"))}
+            if "wechat_openid" not in user_columns:
+                conn.execute(text("ALTER TABLE users ADD COLUMN wechat_openid VARCHAR(80) DEFAULT ''"))
+            if "wechat_unionid" not in user_columns:
+                conn.execute(text("ALTER TABLE users ADD COLUMN wechat_unionid VARCHAR(80) DEFAULT ''"))
+            if "wechat_session_key" not in user_columns:
+                conn.execute(text("ALTER TABLE users ADD COLUMN wechat_session_key VARCHAR(160) DEFAULT ''"))
             version_columns = {row[1] for row in conn.execute(text("PRAGMA table_info(poster_versions)"))}
             if "likes_count" not in version_columns:
                 conn.execute(text("ALTER TABLE poster_versions ADD COLUMN likes_count INTEGER DEFAULT 0"))
@@ -33,6 +41,7 @@ def create_app() -> FastAPI:
 
     app = FastAPI(title="海报快生 MVP", version="0.1.0")
     app.include_router(h5_router)
+    app.include_router(mp_router)
     app.include_router(admin_router)
     app.mount("/uploads", StaticFiles(directory=str(UPLOAD_DIR)), name="uploads")
     app.mount("/h5-static", StaticFiles(directory=str(BASE_DIR / "app" / "static" / "h5")), name="h5-static")

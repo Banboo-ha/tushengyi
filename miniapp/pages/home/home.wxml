@@ -1,0 +1,41 @@
+<view class="page home">
+  <view class="head">
+    <view>
+      <image class="logo" src="/assets/logo_t.png" mode="widthFix"></image>
+      <text class="slogan">一张好图，帮你多卖一点</text>
+    </view>
+    <view class="user" bindtap="goMine">
+      <text>{{profile ? profile.username : '登录'}}</text>
+    </view>
+  </view>
+  <view class="hero card">
+    <image class="hero-bg" src="/assets/ui_v1/home/home-hero.png" mode="aspectFill"></image>
+    <view class="hero-copy">
+      <text class="hero-title">AI 产品海报生成器</text>
+      <text class="hero-sub">上传产品图，快速生成营销海报</text>
+      <button class="primary" bindtap="start">立即生成</button>
+    </view>
+  </view>
+
+  <view class="feature-grid">
+    <view class="feature card" wx:for="{{features}}" wx:key="id" bindtap="pickType" data-id="{{item.id}}">
+      <image src="{{item.icon}}" mode="aspectFit"></image>
+      <text>{{item.name}}</text>
+      <text>{{item.desc}}</text>
+    </view>
+  </view>
+
+  <view class="section-head">
+    <text>热门作品</text>
+    <text bindtap="goPlaza">作品广场 ›</text>
+  </view>
+  <view class="feed-grid">
+    <view class="feed-card" wx:for="{{works}}" wx:key="version_id" bindtap="openWork" data-item="{{item}}">
+      <image src="{{item.cover}}" mode="widthFix"></image>
+      <view class="feed-meta">
+        <text class="feed-title">{{item.title}}</text>
+        <view class="feed-sub"><text class="feed-author">{{item.author_name}}</text><text>♥ {{item.likes_count}}</text></view>
+      </view>
+    </view>
+  </view>
+</view>

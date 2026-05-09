@@ -1,0 +1,80 @@
+.mine-page {
+  padding-bottom: 40rpx;
+}
+
+.profile {
+  display: flex;
+  align-items: center;
+  gap: 22rpx;
+  padding: 30rpx;
+}
+
+.avatar {
+  width: 112rpx;
+  height: 112rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  color: #fff;
+  font-size: 44rpx;
+  font-weight: 900;
+  background: linear-gradient(135deg, #2d7cff, #8d5cff);
+}
+
+.profile-main {
+  flex: 1;
+  min-width: 0;
+}
+
+.name {
+  margin-bottom: 8rpx;
+  font-size: 34rpx;
+  font-weight: 950;
+}
+
+.metrics {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 18rpx;
+  margin: 20rpx 0;
+}
+
+.metric {
+  padding: 28rpx;
+}
+
+.metric-value {
+  color: #2d7cff;
+  font-size: 42rpx;
+  font-weight: 950;
+}
+
+.metric-label {
+  margin-top: 8rpx;
+  color: #7d8bac;
+  font-size: 24rpx;
+}
+
+.menu {
+  overflow: hidden;
+}
+
+.menu-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 30rpx;
+  font-size: 30rpx;
+  font-weight: 800;
+  border-bottom: 1rpx solid #edf2ff;
+}
+
+.menu-row:last-child {
+  border-bottom: 0;
+}
+
+.arrow {
+  color: #9aa7c0;
+  font-size: 42rpx;
+}

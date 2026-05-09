@@ -1,0 +1,90 @@
+page {
+  min-height: 100%;
+  color: #08184f;
+  background: linear-gradient(180deg, #ffffff 0%, #f5f9ff 56%, #eef5ff 100%);
+  font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", sans-serif;
+}
+
+button {
+  border: 0;
+  border-radius: 28rpx;
+  font-weight: 800;
+}
+
+button::after {
+  border: 0;
+}
+
+.page {
+  padding: 28rpx;
+}
+
+.primary {
+  color: #fff;
+  background: linear-gradient(135deg, #2d7cff, #7957ff);
+  box-shadow: 0 18rpx 38rpx rgba(47, 124, 255, .22);
+}
+
+.secondary {
+  color: #2d7cff;
+  background: #eef5ff;
+}
+
+.card {
+  border-radius: 28rpx;
+  background: rgba(255, 255, 255, .94);
+  box-shadow: 0 18rpx 46rpx rgba(65, 91, 170, .13);
+}
+
+.muted {
+  color: #7d8bac;
+}
+
+.feed-grid {
+  column-count: 2;
+  column-gap: 18rpx;
+}
+
+.feed-card {
+  display: inline-block;
+  width: 100%;
+  margin: 0 0 18rpx;
+  overflow: hidden;
+  border-radius: 24rpx;
+  background: #fff;
+  box-shadow: 0 14rpx 34rpx rgba(70, 91, 158, .12);
+}
+
+.feed-card image {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.feed-meta {
+  padding: 16rpx 18rpx 18rpx;
+}
+
+.feed-title {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 27rpx;
+  font-weight: 900;
+}
+
+.feed-sub {
+  margin-top: 10rpx;
+  display: flex;
+  justify-content: space-between;
+  gap: 12rpx;
+  color: #7d8bac;
+  font-size: 23rpx;
+}
+
+.feed-author {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

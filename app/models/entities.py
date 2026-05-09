@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import Optional
 
 from sqlalchemy import Boolean, DateTime, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
@@ -17,6 +18,9 @@ class User(Base):
     id: Mapped[str] = mapped_column(String(32), primary_key=True, default=new_id)
     username: Mapped[str] = mapped_column(String(80), unique=True, index=True)
     password_hash: Mapped[str] = mapped_column(String(255))
+    wechat_openid: Mapped[str] = mapped_column(String(80), default="", index=True)
+    wechat_unionid: Mapped[str] = mapped_column(String(80), default="", index=True)
+    wechat_session_key: Mapped[str] = mapped_column(String(160), default="")
     avatar: Mapped[str] = mapped_column(String(255), default="")
     points_balance: Mapped[int] = mapped_column(Integer, default=0)
     status: Mapped[str] = mapped_column(String(20), default="normal")
@@ -126,6 +130,26 @@ class PointsRecord(Base):
     scene: Mapped[str] = mapped_column(String(80))
     related_id: Mapped[str] = mapped_column(String(32), default="")
     created_at: Mapped[datetime] = mapped_column(DateTime, default=now)
+
+
+class PaymentOrder(Base):
+    __tablename__ = "payment_orders"
+
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=new_id)
+    order_no: Mapped[str] = mapped_column(String(40), unique=True, index=True)
+    user_id: Mapped[str] = mapped_column(String(32), index=True)
+    package_id: Mapped[str] = mapped_column(String(40), default="")
+    title: Mapped[str] = mapped_column(String(120), default="")
+    amount_cents: Mapped[int] = mapped_column(Integer, default=0)
+    points: Mapped[int] = mapped_column(Integer, default=0)
+    status: Mapped[str] = mapped_column(String(20), default="unpaid", index=True)
+    channel: Mapped[str] = mapped_column(String(20), default="wechat")
+    prepay_id: Mapped[str] = mapped_column(String(120), default="")
+    transaction_id: Mapped[str] = mapped_column(String(120), default="")
+    notify_raw: Mapped[str] = mapped_column(Text, default="")
+    paid_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=now, onupdate=now)
 
 
 class SystemSetting(Base):

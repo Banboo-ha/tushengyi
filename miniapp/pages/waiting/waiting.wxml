@@ -1,0 +1,11 @@
+<view class="page waiting">
+  <view class="progress">
+    <view class="ring"></view>
+    <image src="/assets/ui_v1/brand/logo.png" mode="aspectFit"></image>
+  </view>
+  <text class="percent">{{percent}}%</text>
+  <text class="title">正在生成海报</text>
+  <text class="muted">{{message}}</text>
+  <text class="muted">可以关闭页面或切到后台，生成成功会进入作品库。</text>
+  <button class="secondary" bindtap="goWorks">先去作品库</button>
+</view>

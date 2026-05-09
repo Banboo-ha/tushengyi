@@ -1,0 +1,4 @@
+.title { display: block; margin: 12rpx 0; font-size: 42rpx; font-weight: 900; }
+.poster { width: 100%; margin: 24rpx 0; border-radius: 28rpx; }
+.actions { display: grid; grid-template-columns: 1.2fr 1fr; gap: 18rpx; }
+.links { margin-top: 26rpx; display: flex; justify-content: center; gap: 54rpx; color: #7d8bac; font-size: 25rpx; font-weight: 800; }

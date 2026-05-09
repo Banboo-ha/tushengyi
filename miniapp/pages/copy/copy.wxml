@@ -1,0 +1,9 @@
+<view class="page">
+  <view class="step">3/4 填写文案</view>
+  <view class="form card">
+    <text>主标题</text><input value="{{title}}" placeholder="可不填，例如：好水出好鱼" bindinput="setTitle" maxlength="30" />
+    <text>副标题</text><input value="{{subtitle}}" placeholder="可不填" bindinput="setSubtitle" maxlength="40" />
+    <text>卖点文案</text><textarea value="{{selling_points}}" placeholder="可不填，AI 会自动发挥" bindinput="setSelling" maxlength="140" />
+  </view>
+  <button class="primary bottom" bindtap="next">下一步</button>
+</view>

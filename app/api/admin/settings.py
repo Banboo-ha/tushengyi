@@ -46,6 +46,16 @@ class SettingsRequest(BaseModel):
     generate_cost: int = 10
     modify_cost: int = 8
     task_timeout_seconds: int = 300
+    wechat_appid: str = ""
+    wechat_app_secret: str = ""
+    wechat_login_mock_mode: str = "true"
+    wechat_pay_mock_mode: str = "true"
+    wechat_pay_mch_id: str = ""
+    wechat_pay_api_v3_key: str = ""
+    wechat_pay_cert_serial_no: str = ""
+    wechat_pay_private_key_path: str = ""
+    wechat_pay_notify_url: str = ""
+    wechat_pay_packages: str = ""
 
 
 class TestModelRequest(BaseModel):

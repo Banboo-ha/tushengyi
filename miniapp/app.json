@@ -1,0 +1,52 @@
+{
+  "pages": [
+    "pages/home/home",
+    "pages/type/type",
+    "pages/upload-product/upload-product",
+    "pages/upload-reference/upload-reference",
+    "pages/copy/copy",
+    "pages/confirm/confirm",
+    "pages/waiting/waiting",
+    "pages/result/result",
+    "pages/plaza/plaza",
+    "pages/work-detail/work-detail",
+    "pages/mine/mine",
+    "pages/works/works",
+    "pages/likes/likes",
+    "pages/recharge/recharge"
+  ],
+  "window": {
+    "navigationBarTitleText": "图生意",
+    "navigationBarBackgroundColor": "#f5f9ff",
+    "navigationBarTextStyle": "black",
+    "backgroundColor": "#f5f9ff"
+  },
+  "tabBar": {
+    "color": "#9aa7c0",
+    "selectedColor": "#2d7cff",
+    "backgroundColor": "#ffffff",
+    "borderStyle": "white",
+    "list": [
+      {
+        "pagePath": "pages/home/home",
+        "text": "首页",
+        "iconPath": "assets/ui_v1/common/tab-home.png",
+        "selectedIconPath": "assets/ui_v1/common/tab-home-active.png"
+      },
+      {
+        "pagePath": "pages/type/type",
+        "text": "生成",
+        "iconPath": "assets/ui_v1/common/tab-create.png",
+        "selectedIconPath": "assets/ui_v1/common/tab-create-active.png"
+      },
+      {
+        "pagePath": "pages/mine/mine",
+        "text": "我的",
+        "iconPath": "assets/ui_v1/common/tab-mine.png",
+        "selectedIconPath": "assets/ui_v1/common/tab-mine-active.png"
+      }
+    ]
+  },
+  "style": "v2",
+  "sitemapLocation": "sitemap.json"
+}

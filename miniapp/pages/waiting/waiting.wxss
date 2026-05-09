@@ -1,0 +1,11 @@
+.waiting { min-height: 78vh; display: grid; align-content: center; justify-items: center; text-align: center; gap: 20rpx; }
+.progress { position: relative; width: 188rpx; height: 188rpx; border-radius: 50%; display: grid; place-items: center; background: #fff; box-shadow: 0 20rpx 46rpx rgba(47,124,255,.18); }
+.progress image { position: relative; z-index: 2; width: 106rpx; height: 106rpx; border-radius: 28rpx; }
+.ring { position: absolute; inset: -8rpx; border-radius: 50%; border: 10rpx solid rgba(45, 124, 255, .14); border-top-color: #2d7cff; border-right-color: #7957ff; animation: spin 1.2s linear infinite; }
+.percent { color: #2d7cff; font-size: 36rpx; font-weight: 950; }
+.title { font-size: 38rpx; font-weight: 900; }
+.waiting .muted { max-width: 520rpx; line-height: 1.55; }
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
